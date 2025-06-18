@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -23,6 +23,12 @@
             color: #333;
             text-align: center;
             margin-bottom: 30px;
+        }
+        h2 {
+            color: #555;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
         }
         .json-section {
             margin-bottom: 20px;
@@ -92,14 +98,68 @@
         .reverse-engineering:hover {
             background-color: #218838;
         }
+        .generic-generation {
+            background-color: #fd7e14;
+        }
+        .generic-generation:hover {
+            background-color: #e8690b;
+        }
+        .structure-analysis {
+            background-color: #6f42c1;
+        }
+        .structure-analysis:hover {
+            background-color: #5a32a3;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            background-color: #f8f9fa;
+        }
+        .tab.active {
+            background-color: white;
+            border-color: #ddd;
+            border-bottom: 1px solid white;
+            margin-bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .side-by-side {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .side-by-side {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
     <h1>JSON Transformation Service - Demo</h1>
     
-    <div class="container">
-        <h3>Source JSON</h3>
-        <textarea id="sourceJson" placeholder="Enter your source JSON here...">[
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('transformation')">JSON Transformation</div>
+        <div class="tab" onclick="showTab('mapping-rules')">Mapping Rules Generation</div>
+        <div class="tab" onclick="showTab('structure-analysis')">Structure Analysis</div>
+    </div>
+
+    <!-- JSON Transformation Tab -->
+    <div id="transformation" class="tab-content active">
+        <div class="container">
+            <h3>Source JSON</h3>
+            <textarea id="sourceJson" placeholder="Enter your source JSON here...">[
   {
     "employeeId": "E001",
     "name": "John Doe",
@@ -171,26 +231,145 @@
     ]
   }
 ]</textarea>
-    </div>
+        </div>
 
-    <div class="container">
-        <div class="button-group">
-            <button onclick="transformJson()">Transform JSON</button>
-            <button onclick="loadSampleData()">Load Sample Data</button>
-            <button onclick="clearResults()">Clear Results</button>
-            <button onclick="testHealth()">Test Health</button>
-            <button class="reverse-engineering" onclick="generateMappingRules()">Generate Mapping Rules</button>
+        <div class="container">
+            <div class="button-group">
+                <button onclick="transformJson()">Transform JSON</button>
+                <button onclick="loadSampleData()">Load Sample Data</button>
+                <button onclick="clearResults()">Clear Results</button>
+                <button onclick="testHealth()">Test Health</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <h3>Results</h3>
+            <div id="result" class="result" style="display: none;"></div>
         </div>
     </div>
 
-    <div class="container">
-        <h3>Results</h3>
-        <div id="result" class="result" style="display: none;"></div>
+    <!-- Mapping Rules Generation Tab -->
+    <div id="mapping-rules" class="tab-content">
+        <div class="container">
+            <h2>Mapping Rules Generation</h2>
+            <p>Generate mapping rules from MapStruct annotations or by comparing source and target JSON structures.</p>
+            
+            <div class="button-group">
+                <button class="reverse-engineering" onclick="generateMappingRules()">Generate from MapStruct</button>
+                <button class="generic-generation" onclick="showGenericGeneration()">Generate from JSON Comparison</button>
+            </div>
+        </div>
+
+        <div id="genericGenerationSection" class="container" style="display: none;">
+            <h3>Generate Mapping Rules from JSON Comparison</h3>
+            <div class="side-by-side">
+                <div>
+                    <h4>Source JSON</h4>
+                    <textarea id="genericSourceJson" placeholder="Enter source JSON...">[
+  {
+    "employeeId": "E001",
+    "name": "John Doe",
+    "age": 30,
+    "address": {
+      "country": "USA"
+    },
+    "officeDetails": {
+      "location": "New York HQ"
+    }
+  }
+]</textarea>
+                </div>
+                <div>
+                    <h4>Target JSON</h4>
+                    <textarea id="genericTargetJson" placeholder="Enter target JSON...">[
+  {
+    "employeeId": "E001",
+    "employeename": "John Doe",
+    "age": 30,
+    "emplocation": "USA",
+    "officelocation": "New York HQ"
+  }
+]</textarea>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="generic-generation" onclick="generateGenericMappingRules()">Generate Mapping Rules</button>
+                <button onclick="loadGenericSampleData()">Load Sample Data</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <h3>Generated Rules</h3>
+            <div id="mappingRulesResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Structure Analysis Tab -->
+    <div id="structure-analysis" class="tab-content">
+        <div class="container">
+            <h2>JSON Structure Analysis</h2>
+            <p>Analyze JSON structure and generate mapping rules for documentation purposes.</p>
+            
+            <div class="json-section">
+                <h3>JSON Structure to Analyze</h3>
+                <textarea id="structureJson" placeholder="Enter JSON structure to analyze...">{
+  "productId": "P001",
+  "productName": "Laptop",
+  "price": 999.99,
+  "category": {
+    "id": "C001",
+    "name": "Electronics",
+    "description": "Electronic devices"
+  },
+  "specifications": [
+    {
+      "key": "RAM",
+      "value": "16GB",
+      "unit": "GB"
+    },
+    {
+      "key": "Storage",
+      "value": "512GB",
+      "unit": "GB"
+    }
+  ],
+  "tags": ["laptop", "computer", "electronics"]
+}</textarea>
+            </div>
+            
+            <div class="button-group">
+                <button class="structure-analysis" onclick="analyzeJsonStructure()">Analyze Structure</button>
+                <button onclick="loadStructureSampleData()">Load Sample Data</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <h3>Structure Analysis Results</h3>
+            <div id="structureAnalysisResult" class="result" style="display: none;"></div>
+        </div>
     </div>
 
     <script>
         const API_BASE = '/api/transform';
 
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // JSON Transformation functions
         async function transformJson() {
             const sourceJson = document.getElementById('sourceJson').value;
             const resultDiv = document.getElementById('result');
@@ -225,8 +404,9 @@
             }
         }
 
+        // Mapping Rules Generation functions
         async function generateMappingRules() {
-            const resultDiv = document.getElementById('result');
+            const resultDiv = document.getElementById('mappingRulesResult');
             
             try {
                 showLoading('Generating mapping rules from MapStruct...');
@@ -235,15 +415,89 @@
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
-                    showSuccess('Generated Mapping Rules from MapStruct:\n' + data.mappingRules);
+                    showMappingRulesSuccess('Generated Mapping Rules from MapStruct:\n' + data.mappingRules);
                 } else {
-                    showError(data.error || 'Failed to generate mapping rules');
+                    showMappingRulesError(data.error || 'Failed to generate mapping rules');
                 }
             } catch (error) {
-                showError('Network error: ' + error.message);
+                showMappingRulesError('Network error: ' + error.message);
             }
         }
 
+        function showGenericGeneration() {
+            document.getElementById('genericGenerationSection').style.display = 'block';
+        }
+
+        async function generateGenericMappingRules() {
+            const sourceJson = document.getElementById('genericSourceJson').value;
+            const targetJson = document.getElementById('genericTargetJson').value;
+            
+            if (!sourceJson.trim() || !targetJson.trim()) {
+                showMappingRulesError('Please enter both source and target JSON');
+                return;
+            }
+
+            try {
+                showLoading('Generating mapping rules from JSON comparison...');
+                
+                const response = await fetch(`${API_BASE}/rules/generate-from-json`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sourceJson: sourceJson,
+                        targetJson: targetJson
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showMappingRulesSuccess('Generated Mapping Rules from JSON Comparison:\n' + data.mappingRules);
+                } else {
+                    showMappingRulesError(data.error || 'Failed to generate mapping rules');
+                }
+            } catch (error) {
+                showMappingRulesError('Network error: ' + error.message);
+            }
+        }
+
+        // Structure Analysis functions
+        async function analyzeJsonStructure() {
+            const jsonStructure = document.getElementById('structureJson').value;
+            
+            if (!jsonStructure.trim()) {
+                showStructureAnalysisError('Please enter JSON structure to analyze');
+                return;
+            }
+
+            try {
+                showLoading('Analyzing JSON structure...');
+                
+                const response = await fetch(`${API_BASE}/rules/analyze-structure`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        jsonStructure: jsonStructure
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showStructureAnalysisSuccess('Structure Analysis:\n' + data.structureAnalysis);
+                } else {
+                    showStructureAnalysisError(data.error || 'Failed to analyze JSON structure');
+                }
+            } catch (error) {
+                showStructureAnalysisError('Network error: ' + error.message);
+            }
+        }
+
+        // Utility functions
         async function testHealth() {
             try {
                 const response = await fetch(`${API_BASE}/health`);
@@ -293,10 +547,69 @@
             document.getElementById('sourceJson').value = sampleData;
         }
 
-        function clearResults() {
-            document.getElementById('result').style.display = 'none';
+        function loadGenericSampleData() {
+            document.getElementById('genericSourceJson').value = `{
+  "id": "123",
+  "title": "Sample Title",
+  "description": "Sample Description",
+  "metadata": {
+    "created": "2023-01-01",
+    "updated": "2023-01-02"
+  }
+}`;
+            document.getElementById('genericTargetJson').value = `{
+  "documentId": "123",
+  "documentTitle": "Sample Title",
+  "documentDescription": "Sample Description",
+  "documentMetadata": {
+    "creationDate": "2023-01-01",
+    "lastModified": "2023-01-02"
+  }
+}`;
         }
 
+        function loadStructureSampleData() {
+            document.getElementById('structureJson').value = `{
+  "orderId": "ORD001",
+  "customer": {
+    "id": "CUST001",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "address": {
+      "street": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "zipcode": "10001"
+    }
+  },
+  "items": [
+    {
+      "productId": "PROD001",
+      "name": "Laptop",
+      "quantity": 2,
+      "price": 999.99,
+      "options": {
+        "color": "Black",
+        "warranty": "2 years"
+      }
+    }
+  ],
+  "totals": {
+    "subtotal": 2029.97,
+    "tax": 162.40,
+    "shipping": 15.00,
+    "total": 2207.37
+  }
+}`;
+        }
+
+        function clearResults() {
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('mappingRulesResult').style.display = 'none';
+            document.getElementById('structureAnalysisResult').style.display = 'none';
+        }
+
+        // Result display functions
         function showSuccess(content) {
             const resultDiv = document.getElementById('result');
             resultDiv.className = 'result success';
@@ -306,6 +619,34 @@
 
         function showError(message) {
             const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result error';
+            resultDiv.textContent = 'Error: ' + message;
+            resultDiv.style.display = 'block';
+        }
+
+        function showMappingRulesSuccess(content) {
+            const resultDiv = document.getElementById('mappingRulesResult');
+            resultDiv.className = 'result success';
+            resultDiv.textContent = content;
+            resultDiv.style.display = 'block';
+        }
+
+        function showMappingRulesError(message) {
+            const resultDiv = document.getElementById('mappingRulesResult');
+            resultDiv.className = 'result error';
+            resultDiv.textContent = 'Error: ' + message;
+            resultDiv.style.display = 'block';
+        }
+
+        function showStructureAnalysisSuccess(content) {
+            const resultDiv = document.getElementById('structureAnalysisResult');
+            resultDiv.className = 'result success';
+            resultDiv.textContent = content;
+            resultDiv.style.display = 'block';
+        }
+
+        function showStructureAnalysisError(message) {
+            const resultDiv = document.getElementById('structureAnalysisResult');
             resultDiv.className = 'result error';
             resultDiv.textContent = 'Error: ' + message;
             resultDiv.style.display = 'block';
