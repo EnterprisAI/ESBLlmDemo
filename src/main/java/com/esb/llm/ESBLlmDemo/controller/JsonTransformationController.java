@@ -4,11 +4,14 @@ import com.esb.llm.ESBLlmDemo.config.MappingRules;
 import com.esb.llm.ESBLlmDemo.service.JsonTransformationService;
 import com.esb.llm.ESBLlmDemo.service.MappingRulesGeneratorService;
 import com.esb.llm.ESBLlmDemo.service.GenericMappingRulesGeneratorService;
+import com.esb.llm.ESBLlmDemo.service.MapStructBasedMappingRulesGeneratorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/transform")
@@ -23,6 +26,9 @@ public class JsonTransformationController {
 
     @Autowired
     private GenericMappingRulesGeneratorService genericMappingRulesGeneratorService;
+
+    @Autowired
+    private MapStructBasedMappingRulesGeneratorService mapStructBasedMappingRulesGeneratorService;
 
     /**
      * Transform source JSON to target JSON using default mapping rules
@@ -151,5 +157,68 @@ public class JsonTransformationController {
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "UP", "service", "JSON Transformation Service"));
+    }
+
+    /**
+     * Generate mapping rules from a specific MapStruct mapper
+     * @param mapperName The name of the mapper (e.g., "ProductMapper", "OrderMapper", "UserMapper")
+     * @return The generated mapping rules as JSON string
+     */
+    @GetMapping("/rules/mapper/{mapperName}")
+    public ResponseEntity<Map<String, Object>> generateMappingRulesFromMapper(@PathVariable String mapperName) {
+        try {
+            String jsonRules = mapStructBasedMappingRulesGeneratorService.generateMappingRulesAsJson(mapperName);
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "mapperName", mapperName,
+                "mappingRules", jsonRules
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Failed to generate mapping rules for mapper " + mapperName + ": " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get list of available mappers
+     * @return List of available mapper names
+     */
+    @GetMapping("/rules/mappers")
+    public ResponseEntity<Map<String, Object>> getAvailableMappers() {
+        try {
+            List<String> mappers = mapStructBasedMappingRulesGeneratorService.getAvailableMappers();
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "availableMappers", mappers
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(Map.of("error", "Failed to get available mappers: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Generate mapping rules for all available mappers
+     * @return Mapping rules for all mappers
+     */
+    @GetMapping("/rules/mappers/all")
+    public ResponseEntity<Map<String, Object>> generateMappingRulesForAllMappers() {
+        try {
+            List<String> mappers = mapStructBasedMappingRulesGeneratorService.getAvailableMappers();
+            Map<String, String> allRules = new HashMap<>();
+            
+            for (String mapper : mappers) {
+                String rules = mapStructBasedMappingRulesGeneratorService.generateMappingRulesAsJson(mapper);
+                allRules.put(mapper, rules);
+            }
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "allMappingRules", allRules
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(Map.of("error", "Failed to generate mapping rules for all mappers: " + e.getMessage()));
+        }
     }
 } 

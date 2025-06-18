@@ -34,6 +34,7 @@ public class MappingRules {
         private String targetLocation;
         private boolean isArray;
         private List<ConversionRule> items;
+        private String customLogic;
 
         // Default constructor
         public ConversionRule() {}
@@ -63,6 +64,9 @@ public class MappingRules {
 
         public List<ConversionRule> getItems() { return items; }
         public void setItems(List<ConversionRule> items) { this.items = items; }
+
+        public String getCustomLogic() { return customLogic; }
+        public void setCustomLogic(String customLogic) { this.customLogic = customLogic; }
     }
 
     // Static method to get the default mapping rules

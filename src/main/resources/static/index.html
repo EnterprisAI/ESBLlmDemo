@@ -152,6 +152,7 @@
     <div class="tabs">
         <div class="tab active" onclick="showTab('transformation')">JSON Transformation</div>
         <div class="tab" onclick="showTab('mapping-rules')">Mapping Rules Generation</div>
+        <div class="tab" onclick="showTab('mapper-rules')">MapStruct Mapper Rules</div>
         <div class="tab" onclick="showTab('structure-analysis')">Structure Analysis</div>
     </div>
 
@@ -301,6 +302,32 @@
         <div class="container">
             <h3>Generated Rules</h3>
             <div id="mappingRulesResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- MapStruct Mapper Rules Tab -->
+    <div id="mapper-rules" class="tab-content">
+        <div class="container">
+            <h2>MapStruct Mapper Rules Generation</h2>
+            <p>Generate mapping rules directly from MapStruct mapper interfaces. This analyzes the actual @Mapping annotations and expressions to create accurate mapping rules.</p>
+            
+            <div class="button-group">
+                <button class="reverse-engineering" onclick="loadAvailableMappers()">Load Available Mappers</button>
+                <button class="generic-generation" onclick="generateAllMapperRules()">Generate All Mapper Rules</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <h3>Select Mapper</h3>
+            <select id="mapperSelect" style="padding: 8px; margin: 10px 0; width: 200px;">
+                <option value="">Select a mapper...</option>
+            </select>
+            <button onclick="generateSelectedMapperRules()">Generate Rules for Selected Mapper</button>
+        </div>
+
+        <div class="container">
+            <h3>Generated Mapper Rules</h3>
+            <div id="mapperRulesResult" class="result" style="display: none;"></div>
         </div>
     </div>
 
@@ -634,7 +661,7 @@
         function showMappingRulesError(message) {
             const resultDiv = document.getElementById('mappingRulesResult');
             resultDiv.className = 'result error';
-            resultDiv.textContent = 'Error: ' + message;
+            resultDiv.textContent = message;
             resultDiv.style.display = 'block';
         }
 
@@ -657,6 +684,81 @@
             resultDiv.className = 'result loading';
             resultDiv.textContent = message;
             resultDiv.style.display = 'block';
+        }
+
+        // MapStruct Mapper Rules functions
+        async function loadAvailableMappers() {
+            try {
+                showLoading('Loading available mappers...');
+                
+                const response = await fetch(`${API_BASE}/rules/mappers`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    const mapperSelect = document.getElementById('mapperSelect');
+                    mapperSelect.innerHTML = '<option value="">Select a mapper...</option>';
+                    
+                    data.availableMappers.forEach(mapper => {
+                        const option = document.createElement('option');
+                        option.value = mapper;
+                        option.textContent = mapper;
+                        mapperSelect.appendChild(option);
+                    });
+                    
+                    showMapperRulesSuccess('Available mappers loaded: ' + data.availableMappers.join(', '));
+                } else {
+                    showMapperRulesError(data.error || 'Failed to load available mappers');
+                }
+            } catch (error) {
+                showMapperRulesError('Network error: ' + error.message);
+            }
+        }
+
+        async function generateSelectedMapperRules() {
+            const selectedMapper = document.getElementById('mapperSelect').value;
+            
+            if (!selectedMapper) {
+                showMapperRulesError('Please select a mapper first');
+                return;
+            }
+
+            try {
+                showLoading(`Generating rules for ${selectedMapper}...`);
+                
+                const response = await fetch(`${API_BASE}/rules/mapper/${selectedMapper}`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showMapperRulesSuccess(`${selectedMapper} Rules:\n` + data.mappingRules);
+                } else {
+                    showMapperRulesError(data.error || `Failed to generate rules for ${selectedMapper}`);
+                }
+            } catch (error) {
+                showMapperRulesError('Network error: ' + error.message);
+            }
+        }
+
+        async function generateAllMapperRules() {
+            try {
+                showLoading('Generating rules for all mappers...');
+                
+                const response = await fetch(`${API_BASE}/rules/mappers/all`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    let allRules = 'All Mapper Rules:\n\n';
+                    
+                    Object.entries(data.allMappingRules).forEach(([mapper, rules]) => {
+                        allRules += `=== ${mapper} ===\n${rules}\n\n`;
+                    });
+                    
+                    showMapperRulesSuccess(allRules);
+                } else {
+                    showMapperRulesError(data.error || 'Failed to generate rules for all mappers');
+                }
+            } catch (error) {
+                showMapperRulesError('Network error: ' + error.message);
+            }
         }
 
         // Test health on page load
