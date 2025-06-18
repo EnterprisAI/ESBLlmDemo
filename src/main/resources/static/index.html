@@ -80,6 +80,18 @@
             text-align: center;
             color: #666;
         }
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .reverse-engineering {
+            background-color: #28a745;
+        }
+        .reverse-engineering:hover {
+            background-color: #218838;
+        }
     </style>
 </head>
 <body>
@@ -162,14 +174,17 @@
     </div>
 
     <div class="container">
-        <button onclick="transformJson()">Transform JSON</button>
-        <button onclick="loadSampleData()">Load Sample Data</button>
-        <button onclick="clearResults()">Clear Results</button>
-        <button onclick="testHealth()">Test Health</button>
+        <div class="button-group">
+            <button onclick="transformJson()">Transform JSON</button>
+            <button onclick="loadSampleData()">Load Sample Data</button>
+            <button onclick="clearResults()">Clear Results</button>
+            <button onclick="testHealth()">Test Health</button>
+            <button class="reverse-engineering" onclick="generateMappingRules()">Generate Mapping Rules</button>
+        </div>
     </div>
 
     <div class="container">
-        <h3>Transformed JSON</h3>
+        <h3>Results</h3>
         <div id="result" class="result" style="display: none;"></div>
     </div>
 
@@ -201,9 +216,28 @@
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
-                    showSuccess(data.transformedJson);
+                    showSuccess('Transformed JSON:\n' + data.transformedJson);
                 } else {
                     showError(data.error || 'Transformation failed');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function generateMappingRules() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                showLoading('Generating mapping rules from MapStruct...');
+                
+                const response = await fetch(`${API_BASE}/rules/generate`);
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showSuccess('Generated Mapping Rules from MapStruct:\n' + data.mappingRules);
+                } else {
+                    showError(data.error || 'Failed to generate mapping rules');
                 }
             } catch (error) {
                 showError('Network error: ' + error.message);

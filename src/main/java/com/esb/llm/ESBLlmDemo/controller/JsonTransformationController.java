@@ -2,6 +2,7 @@ package com.esb.llm.ESBLlmDemo.controller;
 
 import com.esb.llm.ESBLlmDemo.config.MappingRules;
 import com.esb.llm.ESBLlmDemo.service.JsonTransformationService;
+import com.esb.llm.ESBLlmDemo.service.MappingRulesGeneratorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,9 @@ public class JsonTransformationController {
 
     @Autowired
     private JsonTransformationService transformationService;
+
+    @Autowired
+    private MappingRulesGeneratorService mappingRulesGeneratorService;
 
     /**
      * Transform source JSON to target JSON using default mapping rules
@@ -58,6 +62,24 @@ public class JsonTransformationController {
     @GetMapping("/rules/default")
     public ResponseEntity<MappingRules> getDefaultMappingRules() {
         return ResponseEntity.ok(MappingRules.getDefaultMappingRules());
+    }
+
+    /**
+     * Generate mapping rules from MapStruct annotations
+     * @return The generated mapping rules as JSON string
+     */
+    @GetMapping("/rules/generate")
+    public ResponseEntity<Map<String, Object>> generateMappingRulesFromMapStruct() {
+        try {
+            String jsonRules = mappingRulesGeneratorService.generateMappingRulesAsJson();
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "mappingRules", jsonRules
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                .body(Map.of("error", "Failed to generate mapping rules: " + e.getMessage()));
+        }
     }
 
     /**
