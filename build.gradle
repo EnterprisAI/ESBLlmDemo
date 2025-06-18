@@ -22,6 +22,13 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	implementation("com.bazaarvoice.jolt:jolt-core:0.1.8")
+	implementation("com.bazaarvoice.jolt:json-utils:0.1.8")
+
+	// MapStruct dependencies
+	implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+	annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
 }
 
 tasks.named('test') {
