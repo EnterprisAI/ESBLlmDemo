@@ -447,34 +447,41 @@ public class EnhancedMapStructJsonRuleGeneratorService {
             SOURCE CODE:
             %s
             
-            REQUIREMENTS:
+            CRITICAL REQUIREMENTS:
             1. Extract ALL @Mapping annotations and their source/target properties
             2. Identify ALL method parameters and return types to understand source and target structures
             3. Detect collections (List, Set, arrays) and mark as isArray=true
             4. Include @AfterMapping methods and their effects on target properties
             5. Consider helper classes mentioned in @Mapper(uses = {...}) and their impact
-            6. Include all properties that should be mapped (both explicit and implicit)
+            6. **MOST IMPORTANT**: Include ALL properties that should be mapped, including:
+               - Explicit @Mapping annotations
+               - Implicit field mappings (same name in source and target)
+               - Fields referenced in @AfterMapping methods
+               - Fields used in helper class methods
+               - All fields present in source and target classes
             7. Handle nested object mappings and complex transformations
             8. Consider custom business logic in helper methods
             
+            FIELD DETECTION STRATEGY:
+            - Analyze the mapper interface to identify source and target classes
+            - Look for ALL fields in source class from method parameters
+            - Look for ALL fields in target class from method return types
+            - Include fields even if not explicitly mapped with @Mapping
+            - Include fields referenced in @AfterMapping methods
+            - Include fields used in helper class calculations
+            - **ONLY include fields that exist in BOTH source and target classes**
+            - **CREATE SEPARATE MAPPINGS for each field, not just include them in calculations**
+            
             Generate a comprehensive JSON structure in this exact format:
             {
-              "sourceContentType": "JSON",
-              "targetContentType": "JSON",
+              "sourceContentType": "com.esb.llm.ESBLlmDemo.model.SourceClassName",
+              "targetContentType": "com.esb.llm.ESBLlmDemo.model.TargetClassName",
               "conversionRules": [
                 {
-                  "propID": "MAIN_MAPPING",
-                  "sourceLocation": "$",
-                  "targetLocation": "$",
-                  "isArray": false,
-                  "items": [
-                    {
-                      "propID": "PROPERTY_NAME",
-                      "sourceLocation": "sourceProperty",
-                      "targetLocation": "targetProperty",
-                      "isArray": false
-                    }
-                  ]
+                  "propID": "PROPERTY_NAME_MAPPING",
+                  "sourceLocation": "sourceProperty",
+                  "targetLocation": "targetProperty",
+                  "isArray": false
                 }
               ]
             }
@@ -482,13 +489,27 @@ public class EnhancedMapStructJsonRuleGeneratorService {
             IMPORTANT GUIDELINES:
             - Use actual property names from the mapper code
             - Set isArray=true for List, Set, or array types
-            - Include all properties that should be mapped
+            - **INCLUDE ALL FIELDS** from both source and target classes
             - Consider @AfterMapping methods for computed properties
             - Handle helper class transformations
             - Be comprehensive and include all mapping scenarios
             - Use descriptive propID names based on the actual mapping purpose
+            - **DO NOT MISS ANY FIELDS** - if a field exists in source or target, include it
+            - **ONLY map fields that exist in both source and target**
+            - **CREATE SEPARATE MAPPING RULES for each field**
+            - Use the actual class names from the mapper interface
             
-            Generate the JSON rules based on the actual mapper code provided above.
+            ANALYSIS STEPS:
+            1. Identify the source class from method parameters
+            2. Identify the target class from method return types
+            3. Extract all @Mapping annotations and their source/target properties
+            4. Find all @AfterMapping methods and their field references
+            5. Identify helper classes in @Mapper(uses = {...})
+            6. Look for implicit mappings (same field names in source and target)
+            7. Detect collections and nested objects
+            8. Generate separate mapping rules for each field
+            
+            Generate the JSON rules based on the actual mapper code provided above, ensuring ALL fields are included as separate mappings.
             """, mapperName, mapperCode);
     }
 
