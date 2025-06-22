@@ -10,11 +10,12 @@ public interface SourceTargetMapper {
     @Mapping(source = "id", target = "userId")
     @Mapping(source = "emailList", target = "emails")
     @Mapping(source = "phoneNumbers", target = "phoneNumberList")
+    @Mapping(source = "doj", target = "doj")
+    @Mapping(target = "salary", expression = "java(calculateSalaryWithAdjustment(sourceDto))")
     TargetDto sourceDtoToTargetDto(SourceDto sourceDto);
 
-    @AfterMapping
-    default void setAdjustedSalary(SourceDto sourceDto, @MappingTarget TargetDto targetDto) {
+    default java.math.BigDecimal calculateSalaryWithAdjustment(SourceDto sourceDto) {
         UserMapperHelp helper = new UserMapperHelp();
-        targetDto.setSalary(helper.calculateAdjustedSalary(sourceDto.getSalary(), sourceDto.getAge(), sourceDto.getDoj()));
+        return helper.calculateAdjustedSalary(sourceDto.getSalary(), sourceDto.getAge(), sourceDto.getDoj());
     }
 } 
