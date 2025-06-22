@@ -142,4 +142,23 @@ public class EnhancedMapStructJsonRuleGeneratorServiceTest {
         System.out.println("Expected error: " + exception.getMessage());
         System.out.println("=== Test Complete ===\n");
     }
+
+    @Test
+    public void testExtractFieldMappingsForSourceTargetMapper() throws Exception {
+        System.out.println("=== Testing extractFieldMappings for SourceTargetMapper ===");
+        // Use reflection to access the private method
+        java.lang.reflect.Method method = EnhancedMapStructJsonRuleGeneratorService.class.getDeclaredMethod("extractFieldMappings", String.class);
+        method.setAccessible(true);
+        String result = (String) method.invoke(enhancedJsonRuleGeneratorService, "SourceTargetMapper");
+        System.out.println(result);
+        // Assert that the expected mappings are present
+        assertTrue(result.contains("id -> userId"), "Should contain id -> userId");
+        assertTrue(result.contains("emailList -> emails"), "Should contain emailList -> emails");
+        assertTrue(result.contains("phoneNumbers -> phoneNumberList"), "Should contain phoneNumbers -> phoneNumberList");
+        // Should NOT contain salary, age, doj, class, etc.
+        assertFalse(result.contains("salary -> salary"), "Should NOT contain salary -> salary");
+        assertFalse(result.contains("age -> age"), "Should NOT contain age -> age");
+        assertFalse(result.contains("doj -> doj"), "Should NOT contain doj -> doj");
+        System.out.println("=== Test Complete ===\n");
+    }
 } 

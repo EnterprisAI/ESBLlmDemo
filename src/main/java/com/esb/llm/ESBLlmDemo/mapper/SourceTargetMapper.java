@@ -10,7 +10,6 @@ public interface SourceTargetMapper {
     @Mapping(source = "id", target = "userId")
     @Mapping(source = "emailList", target = "emails")
     @Mapping(source = "phoneNumbers", target = "phoneNumberList")
-//    @Mapping(source = "doj", target = "doj")
     TargetDto sourceDtoToTargetDto(SourceDto sourceDto);
 
     @AfterMapping

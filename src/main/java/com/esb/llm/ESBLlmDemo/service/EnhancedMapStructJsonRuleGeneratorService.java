@@ -12,11 +12,28 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class EnhancedMapStructJsonRuleGeneratorService {
@@ -414,12 +431,7 @@ public class EnhancedMapStructJsonRuleGeneratorService {
      */
     public String generateJsonRulesWithGroq(String mapperName) {
         try {
-            String mapperCode = readMapperSourceFile(mapperName);
-            if (mapperCode == null) {
-                throw new RuntimeException("Could not read mapper source file for: " + mapperName);
-            }
-
-            String prompt = createGroqPrompt(mapperName, mapperCode);
+            String prompt = createGroqPrompt(mapperName, null);
             
             // Debug logging
             System.out.println("=== GROQ PROMPT ===");
@@ -440,100 +452,159 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     }
 
     /**
-     * Extract only the fields that are explicitly mapped via @Mapping annotations
+     * Extract only the fields that are explicitly mapped via @Mapping annotations using JavaParser
      */
-    private String extractFieldMappings(String mapperName, String mapperCode) {
+    private String extractFieldMappings(String mapperName) {
         try {
-            Class<?> mapperClass = Class.forName("com.esb.llm.ESBLlmDemo.mapper." + mapperName);
-            StringBuilder mappings = new StringBuilder();
-            Set<String> mappedFields = new HashSet<>();
+            System.out.println("=== EXTRACTING FIELD MAPPINGS FOR: " + mapperName + " ===");
             
-            // Find all mapping methods
-            List<Method> mappingMethods = findAllMappingMethods(mapperClass);
+            // Find the source file for the mapper
+            String sourceFilePath = findMapperSourceFile(mapperName);
+            System.out.println("Source file path: " + sourceFilePath);
             
-            for (Method method : mappingMethods) {
-                mappings.append("Method: ").append(method.getName()).append("\n");
-                
-                // Extract ONLY @Mapping annotations - these are explicitly mapped
-                List<Map<String, Object>> mappingItems = analyzeMappingAnnotations(method);
-                if (!mappingItems.isEmpty()) {
-                    mappings.append("Explicit @Mapping annotations:\n");
-                    for (Map<String, Object> item : mappingItems) {
-                        String source = (String) item.get("sourceLocation");
-                        String target = (String) item.get("targetLocation");
-                        Boolean isArray = (Boolean) item.get("isArray");
-                        
-                        if (source != null && target != null) {
-                            mappings.append("  - ").append(source).append(" -> ").append(target);
-                            if (isArray != null && isArray) {
-                                mappings.append(" (ARRAY)");
-                            }
-                            mappings.append("\n");
-                            
-                            // Add to mapped fields set - ONLY explicitly mapped fields
-                            mappedFields.add(source);
-                            mappedFields.add(target);
-                        }
-                    }
-                } else {
-                    mappings.append("  No explicit @Mapping annotations found\n");
-                }
-                
-                mappings.append("\n");
+            if (sourceFilePath == null) {
+                System.out.println("Could not find source file for mapper: " + mapperName);
+                return "NO EXPLICIT MAPPINGS FOUND\nCould not locate source file for mapper: " + mapperName;
             }
             
-            // Add summary of ONLY explicitly mapped fields
-            if (!mappedFields.isEmpty()) {
-                mappings.append("=== SUMMARY OF EXPLICITLY MAPPED FIELDS ===\n");
-                mappings.append("Only these fields are explicitly mapped via @Mapping annotations:\n");
-                for (String field : mappedFields) {
-                    mappings.append("  - ").append(field).append("\n");
-                }
-                mappings.append("Total explicitly mapped fields: ").append(mappedFields.size()).append("\n");
-                mappings.append("==========================================\n\n");
-            } else {
-                mappings.append("=== NO EXPLICIT MAPPINGS FOUND ===\n");
-                mappings.append("No @Mapping annotations found in the mapper.\n");
-                mappings.append("================================\n\n");
+            // Parse the source file
+            System.out.println("Parsing source file with JavaParser...");
+            CompilationUnit cu = StaticJavaParser.parse(new File(sourceFilePath));
+            System.out.println("Successfully parsed source file");
+            
+            // Extract mappings from the parsed code
+            MappingExtractor extractor = new MappingExtractor();
+            extractor.visit(cu, null);
+            
+            List<String> mappingPairs = extractor.getMappingPairs();
+            System.out.println("Found " + mappingPairs.size() + " mapping pairs");
+            
+            if (mappingPairs.isEmpty()) {
+                System.out.println("=== EXTRACTED FIELD MAPPINGS RESULT ===");
+                System.out.println("NO EXPLICIT MAPPINGS FOUND");
+                System.out.println("No @Mapping annotations found in the mapper.");
+                System.out.println("=== END EXTRACTED FIELD MAPPINGS ===");
+                return "NO EXPLICIT MAPPINGS FOUND\nNo @Mapping annotations found in the mapper.";
             }
             
-            return mappings.toString();
+            StringBuilder result = new StringBuilder();
+            result.append("EXACT MAPPINGS (from @Mapping annotations):\n");
+            for (String pair : mappingPairs) {
+                result.append(pair).append("\n");
+            }
+            
+            System.out.println("=== EXTRACTED FIELD MAPPINGS RESULT ===");
+            System.out.println(result.toString());
+            System.out.println("=== END EXTRACTED FIELD MAPPINGS ===");
+            
+            return result.toString();
+            
         } catch (Exception e) {
-            return "Could not extract field mappings: " + e.getMessage();
+            System.err.println("Error extracting field mappings: " + e.getMessage());
+            e.printStackTrace();
+            return "ERROR: " + e.getMessage();
         }
     }
     
     /**
-     * Create a prompt for Groq with extracted field mappings
+     * Find the source file for the given mapper name
+     */
+    private String findMapperSourceFile(String mapperName) {
+        // Try to find the source file in the standard Maven/Gradle structure
+        String[] possiblePaths = {
+            "src/main/java/com/esb/llm/ESBLlmDemo/mapper/" + mapperName + ".java",
+            "src/main/java/com/esb/llm/ESBLlmDemo/mapper/" + mapperName + ".java"
+        };
+        
+        for (String path : possiblePaths) {
+            File file = new File(path);
+            if (file.exists()) {
+                return file.getAbsolutePath();
+            }
+        }
+        
+        // If not found, try to search in the project directory
+        try {
+            Path projectRoot = Paths.get(".").toAbsolutePath().normalize();
+            Path mapperPath = projectRoot.resolve("src/main/java/com/esb/llm/ESBLlmDemo/mapper/" + mapperName + ".java");
+            if (Files.exists(mapperPath)) {
+                return mapperPath.toString();
+            }
+        } catch (Exception e) {
+            System.err.println("Error searching for mapper file: " + e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
+     * JavaParser visitor to extract @Mapping annotations
+     */
+    private static class MappingExtractor extends VoidVisitorAdapter<Void> {
+        private List<String> mappingPairs = new ArrayList<>();
+        
+        @Override
+        public void visit(MethodDeclaration md, Void arg) {
+            // Check for @Mapping annotations on the method
+            for (AnnotationExpr annotation : md.getAnnotations()) {
+                if (annotation.getNameAsString().equals("Mapping")) {
+                    String source = "";
+                    String target = "";
+                    
+                    // Handle @Mapping annotation with multiple members
+                    if (annotation.isNormalAnnotationExpr()) {
+                        var normalAnnotation = annotation.asNormalAnnotationExpr();
+                        for (var pair : normalAnnotation.getPairs()) {
+                            if (pair.getNameAsString().equals("source")) {
+                                source = pair.getValue().asStringLiteralExpr().getValue();
+                            } else if (pair.getNameAsString().equals("target")) {
+                                target = pair.getValue().asStringLiteralExpr().getValue();
+                            }
+                        }
+                    }
+                    
+                    if (!source.isEmpty() && !target.isEmpty()) {
+                        mappingPairs.add(source + " -> " + target);
+                    }
+                }
+            }
+            
+            super.visit(md, arg);
+        }
+        
+        public List<String> getMappingPairs() {
+            return mappingPairs;
+        }
+    }
+
+    /**
+     * Create a prompt for Groq with extracted field mappings (without full source code)
      */
     private String createGroqPrompt(String mapperName, String mapperCode) {
-        String fieldMappings = extractFieldMappings(mapperName, mapperCode);
-        System.out.println("Groq prompt filed: "+ fieldMappings);
+        String fieldMappings = extractFieldMappings(mapperName);
+        System.out.println("=== EXTRACTED FIELD MAPPINGS FOR GROQ ===");
+        System.out.println(fieldMappings);
+        System.out.println("=== END EXTRACTED FIELD MAPPINGS ===");
         
         return String.format("""
-            You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper interface and generate comprehensive JSON conversion rules.
+            You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper and generate comprehensive JSON conversion rules.
             
             MAPPER: %s
-            SOURCE CODE:
-            %s
             
             EXTRACTED FIELD MAPPINGS:
             %s
             
             CRITICAL REQUIREMENTS:
             1. Extract ONLY @Mapping annotations and their source/target properties
-            2. Identify method parameters and return types to understand source and target structures
-            3. Detect collections (List, Set, arrays) and mark as isArray=true
-            4. **MOST IMPORTANT**: Include ONLY properties that have explicit @Mapping annotations:
+            2. **MOST IMPORTANT**: Include ONLY properties that have explicit @Mapping annotations:
                - ONLY fields with @Mapping(source = "...", target = "...") annotations
                - **DO NOT include fields that exist in source/target but are not explicitly mapped**
                - **DO NOT include fields from @AfterMapping methods unless they have explicit @Mapping**
                - **DO NOT include fields from helper classes unless they have explicit @Mapping**
-            5. Handle nested object mappings and complex transformations
-            6. **ONLY create mapping rules for explicitly mapped fields**
+            3. Handle collections (List, Set, arrays) and mark as isArray=true
+            4. **ONLY create mapping rules for explicitly mapped fields**
             
             FIELD DETECTION STRATEGY:
-            - Analyze the mapper interface to identify source and target classes
             - Look for fields that are EXPLICITLY mapped with @Mapping annotations ONLY
             - **IGNORE fields that are referenced in @AfterMapping methods but not explicitly mapped**
             - **IGNORE fields that are used in helper class calculations but not explicitly mapped**
@@ -567,16 +638,14 @@ public class EnhancedMapStructJsonRuleGeneratorService {
             - Use the actual class names from the mapper interface
             
             ANALYSIS STEPS:
-            1. Identify the source class from method parameters
-            2. Identify the target class from method return types
-            3. Extract all @Mapping annotations and their source/target properties (see extracted mappings)
-            4. **IGNORE @AfterMapping methods unless they have explicit @Mapping annotations**
-            5. **IGNORE helper classes unless they have explicit @Mapping annotations**
-            6. Detect collections and nested objects
-            7. Generate separate mapping rules for each EXPLICITLY MAPPED field only
+            1. Extract all @Mapping annotations and their source/target properties (see extracted mappings)
+            2. **IGNORE @AfterMapping methods unless they have explicit @Mapping annotations**
+            3. **IGNORE helper classes unless they have explicit @Mapping annotations**
+            4. Detect collections and nested objects
+            5. Generate separate mapping rules for each EXPLICITLY MAPPED field only
             
-            Generate the JSON rules based on the actual mapper code and extracted mappings provided above, ensuring ONLY fields with explicit @Mapping annotations are included as separate mappings.
-            """, mapperName, mapperCode, fieldMappings);
+            Generate the JSON rules based on the extracted mappings provided above, ensuring ONLY fields with explicit @Mapping annotations are included as separate mappings.
+            """, mapperName, fieldMappings);
     }
 
     /**
@@ -693,12 +762,7 @@ public class EnhancedMapStructJsonRuleGeneratorService {
      */
     public String generateJsonRulesWithOllama(String mapperName) {
         try {
-            String mapperCode = readMapperSourceFile(mapperName);
-            if (mapperCode == null) {
-                throw new RuntimeException("Could not read mapper source file for: " + mapperName);
-            }
-
-            String prompt = createOllamaPrompt(mapperName, mapperCode);
+            String prompt = createOllamaPrompt(mapperName, null);
             
             // Debug logging
             System.out.println("=== OLLAMA PROMPT ===");
@@ -719,27 +783,27 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     }
 
     /**
-     * Create a prompt for Ollama - optimized for Mistral model with extracted field mappings
+     * Create a prompt for Ollama - optimized for Mistral model with extracted field mappings (without full source code)
      */
     private String createOllamaPrompt(String mapperName, String mapperCode) {
-        String fieldMappings = extractFieldMappings(mapperName, mapperCode);
+        String fieldMappings = extractFieldMappings(mapperName);
+        System.out.println("=== EXTRACTED FIELD MAPPINGS FOR OLLAMA ===");
+        System.out.println(fieldMappings);
+        System.out.println("=== END EXTRACTED FIELD MAPPINGS ===");
         
         return String.format("""
 Extract mapping rules from this MapStruct mapper:
 
 MAPPER: %s
-CODE:
-%s
 
 EXTRACTED FIELD MAPPINGS:
 %s
 
-INSTRUCTIONS:
-1. Find ONLY @Mapping annotations and their source/target properties (see extracted mappings above)
-2. **ONLY include fields that have explicit @Mapping annotations**
-3. Create ONE mapping rule for EACH explicitly mapped field
-
-IMPORTANT: Use the extracted field mappings above to ensure you include ONLY the fields that have explicit @Mapping annotations. The extracted mappings show the exact source->target field relationships found in the code. DO NOT include fields that exist in source/target classes but are not explicitly mapped. DO NOT include fields from @AfterMapping methods unless they have explicit @Mapping annotations.
+CRITICAL INSTRUCTIONS:
+1. ONLY use the source/target field pairs listed in the 'EXACT MAPPINGS' section above.
+2. DO NOT include any fields that are NOT listed in the exact mappings.
+3. The exact mappings show EXACTLY which fields have explicit @Mapping annotations.
+4. If the exact mappings section is '(none)', return an empty conversionRules array.
 
 OUTPUT FORMAT - Return ONLY this complete JSON structure:
 {
@@ -755,8 +819,15 @@ OUTPUT FORMAT - Return ONLY this complete JSON structure:
   ]
 }
 
-CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partial results, or multiple JSON blocks. Include ONLY fields from explicit @Mapping annotations as shown in the extracted mappings above. DO NOT include unmapped fields or fields from @AfterMapping methods without explicit @Mapping annotations.
-""", mapperName, mapperCode, fieldMappings);
+MANDATORY RULES:
+- ONLY include fields that appear in the exact mappings above.
+- If exact mappings show '(none)', return empty conversionRules: [].
+- DO NOT include fields from @AfterMapping methods unless they appear in exact mappings.
+- DO NOT include fields that exist in source/target classes but are not in exact mappings.
+- Use the exact field names from the exact mappings.
+
+CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partial results, or multiple JSON blocks. Include ONLY fields from the exact mappings above.
+""", mapperName, fieldMappings);
     }
 
     /**
