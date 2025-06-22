@@ -99,4 +99,41 @@ public class EnhancedJsonRuleGeneratorController {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
     }
+
+    /**
+     * Generate JSON rules using Ollama API with enhanced prompt
+     */
+    @PostMapping("/generate-with-ollama")
+    public ResponseEntity<String> generateJsonRulesWithOllama(@RequestBody Map<String, String> request) {
+        try {
+            String mapperName = request.get("mapperName");
+            String mapperCode = request.get("mapperCode");
+            
+            if (mapperName == null || mapperCode == null) {
+                return ResponseEntity.badRequest().body("Error: mapperName and mapperCode are required");
+            }
+            
+            String rules = enhancedJsonRuleGeneratorService.generateJsonRulesWithOllama(mapperName);
+            return ResponseEntity.ok(rules);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generate JSON rules using Ollama by just passing the mapper class name
+     */
+    @PostMapping("/generate-with-ollama-class")
+    public ResponseEntity<String> generateJsonRulesWithOllamaByClass(@RequestBody Map<String, String> request) {
+        try {
+            String mapperName = request.get("mapperName");
+            if (mapperName == null) {
+                return ResponseEntity.badRequest().body("Error: mapperName is required");
+            }
+            String rules = enhancedJsonRuleGeneratorService.generateJsonRulesWithOllamaByClassName(mapperName);
+            return ResponseEntity.ok(rules);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
+    }
 } 

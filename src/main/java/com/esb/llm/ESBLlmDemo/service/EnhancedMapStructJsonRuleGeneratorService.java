@@ -28,6 +28,10 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     private static final String GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String GROQ_API_KEY = "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";
     private static final String GROQ_MODEL = "llama3-8b-8192";
+    
+    // Ollama configuration
+    private static final String OLLAMA_BASE_URL = "http://localhost:11434/api/generate";
+    private static final String OLLAMA_MODEL = "mistral";
 
     /**
      * Generate JSON conversion rules from a MapStruct mapper interface
@@ -548,6 +552,100 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     public String generateJsonRulesWithGroqByClassName(String mapperName) {
         try {
             return generateJsonRulesWithGroq(mapperName);
+        } catch (Exception e) {
+            throw new RuntimeException("Error reading mapper source or generating rules: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Generate JSON rules using Ollama API with enhanced prompt
+     */
+    public String generateJsonRulesWithOllama(String mapperName) {
+        try {
+            String mapperCode = readMapperSourceFile(mapperName);
+            if (mapperCode == null) {
+                throw new RuntimeException("Could not read mapper source file for: " + mapperName);
+            }
+
+            String prompt = createOllamaPrompt(mapperName, mapperCode);
+            
+            // Debug logging
+            System.out.println("=== OLLAMA PROMPT ===");
+            System.out.println(prompt);
+            System.out.println("=== END PROMPT ===");
+
+            String ollamaResponse = callOllama(prompt);
+            
+            // Debug logging
+            System.out.println("=== OLLAMA RESPONSE ===");
+            System.out.println(ollamaResponse);
+            System.out.println("=== END RESPONSE ===");
+
+            return parseOllamaResponse(ollamaResponse);
+        } catch (Exception e) {
+            throw new RuntimeException("Error generating JSON rules with Ollama for " + mapperName, e);
+        }
+    }
+
+    /**
+     * Create a prompt for Ollama
+     */
+    private String createOllamaPrompt(String mapperName, String mapperCode) {
+        return String.format("You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper interface and generate comprehensive JSON conversion rules. MAPPER: %s SOURCE CODE: %s CRITICAL REQUIREMENTS: 1. Extract ALL @Mapping annotations and their source/target properties 2. Identify ALL method parameters and return types to understand source and target structures 3. Detect collections (List, Set, arrays) and mark as isArray=true 4. Include @AfterMapping methods and their effects on target properties 5. Consider helper classes mentioned in @Mapper(uses = {...}) and their impact 6. MOST IMPORTANT: Include ALL properties that should be mapped, including: - Explicit @Mapping annotations - Implicit field mappings (same name in source and target) - Fields referenced in @AfterMapping methods - Fields used in helper class methods - All fields present in source and target classes 7. Handle nested object mappings and complex transformations 8. Consider custom business logic in helper methods FIELD DETECTION STRATEGY: - Analyze the mapper interface to identify source and target classes - Look for ALL fields in source class from method parameters - Look for ALL fields in target class from method return types - Include fields even if not explicitly mapped with @Mapping - Include fields referenced in @AfterMapping methods - Include fields used in helper class calculations - ONLY include fields that exist in BOTH source and target classes - CREATE SEPARATE MAPPINGS for each field, not just include them in calculations Generate a comprehensive JSON structure in this exact format: {\"sourceContentType\": \"com.esb.llm.ESBLlmDemo.model.SourceClassName\", \"targetContentType\": \"com.esb.llm.ESBLlmDemo.model.TargetClassName\", \"conversionRules\": [{\"propID\": \"PROPERTY_NAME_MAPPING\", \"sourceLocation\": \"sourceProperty\", \"targetLocation\": \"targetProperty\", \"isArray\": false}]} IMPORTANT GUIDELINES: - Use actual property names from the mapper code - Set isArray=true for List, Set, or array types - INCLUDE ALL FIELDS from both source and target classes - Consider @AfterMapping methods for computed properties - Handle helper class transformations - Be comprehensive and include all mapping scenarios - Use descriptive propID names based on the actual mapping purpose - DO NOT MISS ANY FIELDS - if a field exists in source or target, include it - ONLY map fields that exist in both source and target - CREATE SEPARATE MAPPING RULES for each field - Use the actual class names from the mapper interface ANALYSIS STEPS: 1. Identify the source class from method parameters 2. Identify the target class from method return types 3. Extract all @Mapping annotations and their source/target properties 4. Find all @AfterMapping methods and their field references 5. Identify helper classes in @Mapper(uses = {...}) 6. Look for implicit mappings (same field names in source and target) 7. Detect collections and nested objects 8. Generate separate mapping rules for each field Generate the JSON rules based on the actual mapper code provided above, ensuring ALL fields are included as separate mappings.", mapperName, mapperCode);
+    }
+
+    /**
+     * Call Ollama API
+     */
+    private String callOllama(String prompt) {
+        try {
+            // Create headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            // Create request body in Ollama format
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", OLLAMA_MODEL);
+            requestBody.put("prompt", prompt);
+            requestBody.put("stream", false);
+            
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
+            ResponseEntity<Map> response = restTemplate.postForEntity(OLLAMA_BASE_URL, request, Map.class);
+            
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                if (body.containsKey("response")) {
+                    return (String) body.get("response");
+                }
+            }
+            
+            return "Error: No valid response from Ollama";
+        } catch (Exception e) {
+            return "Error calling Ollama: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Parse Ollama response
+     */
+    private String parseOllamaResponse(String response) {
+        int startIndex = response.indexOf("{");
+        int endIndex = response.lastIndexOf("}") + 1;
+        
+        if (startIndex >= 0 && endIndex > startIndex) {
+            return response.substring(startIndex, endIndex);
+        }
+        
+        return response;
+    }
+
+    /**
+     * Generate JSON rules for a mapper by class name, reading the source code and using Ollama
+     */
+    public String generateJsonRulesWithOllamaByClassName(String mapperName) {
+        try {
+            return generateJsonRulesWithOllama(mapperName);
         } catch (Exception e) {
             throw new RuntimeException("Error reading mapper source or generating rules: " + e.getMessage(), e);
         }
