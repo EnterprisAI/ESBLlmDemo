@@ -440,12 +440,143 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     }
 
     /**
-     * Create a prompt for Groq
+     * Extract only the fields that are explicitly mapped via @Mapping annotations
+     */
+    private String extractFieldMappings(String mapperName, String mapperCode) {
+        try {
+            Class<?> mapperClass = Class.forName("com.esb.llm.ESBLlmDemo.mapper." + mapperName);
+            StringBuilder mappings = new StringBuilder();
+            Set<String> mappedFields = new HashSet<>();
+            
+            // Find all mapping methods
+            List<Method> mappingMethods = findAllMappingMethods(mapperClass);
+            
+            for (Method method : mappingMethods) {
+                mappings.append("Method: ").append(method.getName()).append("\n");
+                
+                // Extract ONLY @Mapping annotations - these are explicitly mapped
+                List<Map<String, Object>> mappingItems = analyzeMappingAnnotations(method);
+                if (!mappingItems.isEmpty()) {
+                    mappings.append("Explicit @Mapping annotations:\n");
+                    for (Map<String, Object> item : mappingItems) {
+                        String source = (String) item.get("sourceLocation");
+                        String target = (String) item.get("targetLocation");
+                        Boolean isArray = (Boolean) item.get("isArray");
+                        
+                        if (source != null && target != null) {
+                            mappings.append("  - ").append(source).append(" -> ").append(target);
+                            if (isArray != null && isArray) {
+                                mappings.append(" (ARRAY)");
+                            }
+                            mappings.append("\n");
+                            
+                            // Add to mapped fields set - ONLY explicitly mapped fields
+                            mappedFields.add(source);
+                            mappedFields.add(target);
+                        }
+                    }
+                } else {
+                    mappings.append("  No explicit @Mapping annotations found\n");
+                }
+                
+                mappings.append("\n");
+            }
+            
+            // Add summary of ONLY explicitly mapped fields
+            if (!mappedFields.isEmpty()) {
+                mappings.append("=== SUMMARY OF EXPLICITLY MAPPED FIELDS ===\n");
+                mappings.append("Only these fields are explicitly mapped via @Mapping annotations:\n");
+                for (String field : mappedFields) {
+                    mappings.append("  - ").append(field).append("\n");
+                }
+                mappings.append("Total explicitly mapped fields: ").append(mappedFields.size()).append("\n");
+                mappings.append("==========================================\n\n");
+            } else {
+                mappings.append("=== NO EXPLICIT MAPPINGS FOUND ===\n");
+                mappings.append("No @Mapping annotations found in the mapper.\n");
+                mappings.append("================================\n\n");
+            }
+            
+            return mappings.toString();
+        } catch (Exception e) {
+            return "Could not extract field mappings: " + e.getMessage();
+        }
+    }
+    
+    /**
+     * Create a prompt for Groq with extracted field mappings
      */
     private String createGroqPrompt(String mapperName, String mapperCode) {
+        String fieldMappings = extractFieldMappings(mapperName, mapperCode);
+        System.out.println("Groq prompt filed: "+ fieldMappings);
+        
         return String.format("""
-            You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper interface and generate comprehensive JSON conversion rules. MAPPER: %s SOURCE CODE: %s CRITICAL REQUIREMENTS: 1. Extract ALL @Mapping annotations and their source/target properties 2. Identify ALL method parameters and return types to understand source and target structures 3. Detect collections (List, Set, arrays) and mark as isArray=true 4. Include @AfterMapping methods and their effects on target properties 5. Consider helper classes mentioned in @Mapper(uses = {...}) and their impact 6. **MOST IMPORTANT**: Include ALL properties that should be mapped, including: - Explicit @Mapping annotations - Implicit field mappings (same name in source and target) - Fields referenced in @AfterMapping methods - Fields used in any helper class methods linked to the mapper interface/abstract class. - All fields present in source and target classes 7. Handle nested object mappings and complex transformations 8. Consider custom business logic in helper methods FIELD DETECTION STRATEGY: - Analyze the mapper interface to identify source and target classes - Look for ALL fields in source class from method parameters - Look for ALL fields in target class from method return types - Include fields even if not explicitly mapped with @Mapping - Include fields referenced in @AfterMapping methods - Include fields used in helper class calculations - **ONLY include fields that exist in BOTH source and target classes** - **CREATE SEPARATE MAPPINGS for each field, not just include them in calculations** Generate a comprehensive JSON structure in this exact format: { "sourceContentType": "com.esb.llm.ESBLlmDemo.model.SourceClassName", "targetContentType": "com.esb.llm.ESBLlmDemo.model.TargetClassName", "conversionRules": [ { "propID": "PROPERTY_NAME_MAPPING", "sourceLocation": "sourceProperty", "targetLocation": "targetProperty", "isArray": false } ] } IMPORTANT GUIDELINES: - Use actual property names from the mapper code - Set isArray=true for List, Set, or array types - **INCLUDE ALL FIELDS** from both source and target classes - Consider @AfterMapping methods for computed properties - Handle helper class transformations - Be comprehensive and include all mapping scenarios - Use descriptive propID names based on the actual mapping purpose - **DO NOT MISS ANY FIELDS** - if a field exists in source or target, include it - **ONLY map fields that exist in both source and target** - **CREATE SEPARATE MAPPING RULES for each field** - Use the actual class names from the mapper interface ANALYSIS STEPS: 1. Identify the source class from method parameters 2. Identify the target class from method return types 3. Extract all @Mapping annotations and their source/target properties 4. Find all @AfterMapping methods and their field references 5. Identify helper classes in @Mapper(uses = {...}) 6. Look for implicit mappings (same field names in source and target) 7. Detect collections and nested objects 8. Generate separate mapping rules for each field Generate the JSON rules based on the actual mapper code provided above, ensuring ALL fields are included as separate mappings.
-            """, mapperName, mapperCode);
+            You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper interface and generate comprehensive JSON conversion rules.
+            
+            MAPPER: %s
+            SOURCE CODE:
+            %s
+            
+            EXTRACTED FIELD MAPPINGS:
+            %s
+            
+            CRITICAL REQUIREMENTS:
+            1. Extract ONLY @Mapping annotations and their source/target properties
+            2. Identify method parameters and return types to understand source and target structures
+            3. Detect collections (List, Set, arrays) and mark as isArray=true
+            4. **MOST IMPORTANT**: Include ONLY properties that have explicit @Mapping annotations:
+               - ONLY fields with @Mapping(source = "...", target = "...") annotations
+               - **DO NOT include fields that exist in source/target but are not explicitly mapped**
+               - **DO NOT include fields from @AfterMapping methods unless they have explicit @Mapping**
+               - **DO NOT include fields from helper classes unless they have explicit @Mapping**
+            5. Handle nested object mappings and complex transformations
+            6. **ONLY create mapping rules for explicitly mapped fields**
+            
+            FIELD DETECTION STRATEGY:
+            - Analyze the mapper interface to identify source and target classes
+            - Look for fields that are EXPLICITLY mapped with @Mapping annotations ONLY
+            - **IGNORE fields that are referenced in @AfterMapping methods but not explicitly mapped**
+            - **IGNORE fields that are used in helper class calculations but not explicitly mapped**
+            - **ONLY include fields that have explicit @Mapping annotations**
+            - **CREATE SEPARATE MAPPINGS for each explicitly mapped field**
+            
+            Generate a comprehensive JSON structure in this exact format:
+            {
+              "sourceContentType": "com.esb.llm.ESBLlmDemo.model.SourceClassName",
+              "targetContentType": "com.esb.llm.ESBLlmDemo.model.TargetClassName",
+              "conversionRules": [
+                {
+                  "propID": "PROPERTY_NAME_MAPPING",
+                  "sourceLocation": "sourceProperty",
+                  "targetLocation": "targetProperty",
+                  "isArray": false
+                }
+              ]
+            }
+            
+            IMPORTANT GUIDELINES:
+            - Use actual property names from the @Mapping annotations ONLY
+            - Set isArray=true for List, Set, or array types
+            - **INCLUDE ONLY FIELDS that have explicit @Mapping annotations**
+            - **IGNORE @AfterMapping methods unless fields are explicitly mapped**
+            - **IGNORE helper class transformations unless fields are explicitly mapped**
+            - Be comprehensive but only for explicitly mapped fields
+            - Use descriptive propID names based on the actual mapping purpose
+            - **DO NOT include fields that exist in source/target but are not explicitly mapped**
+            - **CREATE SEPARATE MAPPING RULES for each explicitly mapped field**
+            - Use the actual class names from the mapper interface
+            
+            ANALYSIS STEPS:
+            1. Identify the source class from method parameters
+            2. Identify the target class from method return types
+            3. Extract all @Mapping annotations and their source/target properties (see extracted mappings)
+            4. **IGNORE @AfterMapping methods unless they have explicit @Mapping annotations**
+            5. **IGNORE helper classes unless they have explicit @Mapping annotations**
+            6. Detect collections and nested objects
+            7. Generate separate mapping rules for each EXPLICITLY MAPPED field only
+            
+            Generate the JSON rules based on the actual mapper code and extracted mappings provided above, ensuring ONLY fields with explicit @Mapping annotations are included as separate mappings.
+            """, mapperName, mapperCode, fieldMappings);
     }
 
     /**
@@ -588,10 +719,44 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     }
 
     /**
-     * Create a prompt for Ollama
+     * Create a prompt for Ollama - optimized for Mistral model with extracted field mappings
      */
     private String createOllamaPrompt(String mapperName, String mapperCode) {
-        return String.format("You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper interface and generate comprehensive JSON conversion rules. MAPPER: %s SOURCE CODE: %s CRITICAL REQUIREMENTS: 1. Extract ALL @Mapping annotations and their source/target properties 2. Identify ALL method parameters and return types to understand source and target structures 3. Detect collections (List, Set, arrays) and mark as isArray=true 4. Include @AfterMapping methods and their effects on target properties 5. Consider helper classes mentioned in @Mapper(uses = {...}) and their impact 6. MOST IMPORTANT: Include ALL properties that should be mapped, including: - Explicit @Mapping annotations - Implicit field mappings (same name in source and target) - Fields referenced in @AfterMapping methods - Fields used in helper class methods - All fields present in source and target classes 7. Handle nested object mappings and complex transformations 8. Consider custom business logic in helper methods FIELD DETECTION STRATEGY: - Analyze the mapper interface to identify source and target classes - Look for ALL fields in source class from method parameters - Look for ALL fields in target class from method return types - Include fields even if not explicitly mapped with @Mapping - Include fields referenced in @AfterMapping methods - Include fields used in helper class calculations - ONLY include fields that exist in BOTH source and target classes - CREATE SEPARATE MAPPINGS for each field, not just include them in calculations Generate a comprehensive JSON structure in this exact format: {\"sourceContentType\": \"com.esb.llm.ESBLlmDemo.model.SourceClassName\", \"targetContentType\": \"com.esb.llm.ESBLlmDemo.model.TargetClassName\", \"conversionRules\": [{\"propID\": \"PROPERTY_NAME_MAPPING\", \"sourceLocation\": \"sourceProperty\", \"targetLocation\": \"targetProperty\", \"isArray\": false}]} IMPORTANT GUIDELINES: - Use actual property names from the mapper code - Set isArray=true for List, Set, or array types - INCLUDE ALL FIELDS from both source and target classes - Consider @AfterMapping methods for computed properties - Handle helper class transformations - Be comprehensive and include all mapping scenarios - Use descriptive propID names based on the actual mapping purpose - DO NOT MISS ANY FIELDS - if a field exists in source or target, include it - ONLY map fields that exist in both source and target - CREATE SEPARATE MAPPING RULES for each field - Use the actual class names from the mapper interface ANALYSIS STEPS: 1. Identify the source class from method parameters 2. Identify the target class from method return types 3. Extract all @Mapping annotations and their source/target properties 4. Find all @AfterMapping methods and their field references 5. Identify helper classes in @Mapper(uses = {...}) 6. Look for implicit mappings (same field names in source and target) 7. Detect collections and nested objects 8. Generate separate mapping rules for each field Generate the JSON rules based on the actual mapper code provided above, ensuring ALL fields are included as separate mappings.", mapperName, mapperCode);
+        String fieldMappings = extractFieldMappings(mapperName, mapperCode);
+        
+        return String.format("""
+Extract mapping rules from this MapStruct mapper:
+
+MAPPER: %s
+CODE:
+%s
+
+EXTRACTED FIELD MAPPINGS:
+%s
+
+INSTRUCTIONS:
+1. Find ONLY @Mapping annotations and their source/target properties (see extracted mappings above)
+2. **ONLY include fields that have explicit @Mapping annotations**
+3. Create ONE mapping rule for EACH explicitly mapped field
+
+IMPORTANT: Use the extracted field mappings above to ensure you include ONLY the fields that have explicit @Mapping annotations. The extracted mappings show the exact source->target field relationships found in the code. DO NOT include fields that exist in source/target classes but are not explicitly mapped. DO NOT include fields from @AfterMapping methods unless they have explicit @Mapping annotations.
+
+OUTPUT FORMAT - Return ONLY this complete JSON structure:
+{
+  "sourceContentType": "FULL_SOURCE_CLASS_NAME",
+  "targetContentType": "FULL_TARGET_CLASS_NAME",
+  "conversionRules": [
+    {
+      "propID": "sourceFieldName_mapping",
+      "sourceLocation": "sourceFieldName",
+      "targetLocation": "targetFieldName",
+      "isArray": false
+    }
+  ]
+}
+
+CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partial results, or multiple JSON blocks. Include ONLY fields from explicit @Mapping annotations as shown in the extracted mappings above. DO NOT include unmapped fields or fields from @AfterMapping methods without explicit @Mapping annotations.
+""", mapperName, mapperCode, fieldMappings);
     }
 
     /**
