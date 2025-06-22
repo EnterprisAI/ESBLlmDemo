@@ -440,66 +440,38 @@ public class EnhancedMapStructJsonRuleGeneratorService {
      */
     private String createGroqPrompt(String mapperName, String mapperCode) {
         return String.format("""
-            Analyze this MapStruct mapper and extract ALL mapping rules:
+            You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper interface and generate comprehensive JSON conversion rules.
             
             MAPPER: %s
             
             SOURCE CODE:
             %s
             
-            EXTRACT THESE SPECIFIC MAPPINGS:
-            1. @Mapping(source = "id", target = "userId")
-            2. @Mapping(source = "emailList", target = "emails") 
-            3. @Mapping(source = "phoneNumbers", target = "phoneNumberList")
-            4. @AfterMapping method: setAdjustedSalary
-            5. Helper class: UserMapperHelp
-            6. All other properties that should be mapped
+            REQUIREMENTS:
+            1. Extract ALL @Mapping annotations and their source/target properties
+            2. Identify ALL method parameters and return types to understand source and target structures
+            3. Detect collections (List, Set, arrays) and mark as isArray=true
+            4. Include @AfterMapping methods and their effects on target properties
+            5. Consider helper classes mentioned in @Mapper(uses = {...}) and their impact
+            6. Include all properties that should be mapped (both explicit and implicit)
+            7. Handle nested object mappings and complex transformations
+            8. Consider custom business logic in helper methods
             
-            Generate JSON with ALL these mappings:
+            Generate a comprehensive JSON structure in this exact format:
             {
               "sourceContentType": "JSON",
-              "targetContentType": "JSON", 
+              "targetContentType": "JSON",
               "conversionRules": [
                 {
-                  "propID": "SOURCE_TARGET_MAPPING",
+                  "propID": "MAIN_MAPPING",
                   "sourceLocation": "$",
                   "targetLocation": "$",
                   "isArray": false,
                   "items": [
                     {
-                      "propID": "USER_ID",
-                      "sourceLocation": "id",
-                      "targetLocation": "userId",
-                      "isArray": false
-                    },
-                    {
-                      "propID": "EMAILS",
-                      "sourceLocation": "emailList", 
-                      "targetLocation": "emails",
-                      "isArray": true
-                    },
-                    {
-                      "propID": "PHONE_NUMBERS",
-                      "sourceLocation": "phoneNumbers",
-                      "targetLocation": "phoneNumberList", 
-                      "isArray": true
-                    },
-                    {
-                      "propID": "AGE",
-                      "sourceLocation": "age",
-                      "targetLocation": "age",
-                      "isArray": false
-                    },
-                    {
-                      "propID": "SALARY",
-                      "sourceLocation": "salary",
-                      "targetLocation": "salary",
-                      "isArray": false
-                    },
-                    {
-                      "propID": "DOJ",
-                      "sourceLocation": "doj",
-                      "targetLocation": "doj",
+                      "propID": "PROPERTY_NAME",
+                      "sourceLocation": "sourceProperty",
+                      "targetLocation": "targetProperty",
                       "isArray": false
                     }
                   ]
@@ -507,7 +479,16 @@ public class EnhancedMapStructJsonRuleGeneratorService {
               ]
             }
             
-            IMPORTANT: Use the actual mappings from the code above, not example data.
+            IMPORTANT GUIDELINES:
+            - Use actual property names from the mapper code
+            - Set isArray=true for List, Set, or array types
+            - Include all properties that should be mapped
+            - Consider @AfterMapping methods for computed properties
+            - Handle helper class transformations
+            - Be comprehensive and include all mapping scenarios
+            - Use descriptive propID names based on the actual mapping purpose
+            
+            Generate the JSON rules based on the actual mapper code provided above.
             """, mapperName, mapperCode);
     }
 
