@@ -1,8 +1,21 @@
-# ESB LLM Demo - JSON Transformation Service
+# ESB LLM Demo - Advanced JSON Transformation Service with AI-Powered Mapping
 
-This Spring Boot application provides a comprehensive JSON transformation service that maps between different JSON structures using **MapStruct** (annotation-based mapping library) and includes **reverse engineering** capabilities to generate JSON mapping rules from existing MapStruct annotations. Additionally, it features a **generic mapping rules generator** that can analyze any source and target JSON structures to automatically generate mapping rules.
+This Spring Boot application provides a comprehensive JSON transformation service that maps between different JSON structures using **MapStruct** (annotation-based mapping library) and includes **AI-powered reverse engineering** capabilities using **Groq LLM** to generate JSON mapping rules from existing MapStruct annotations. The system can analyze complex mapper interfaces, helper classes, and business logic to generate comprehensive mapping documentation.
 
-## Project Structure
+## 🚀 Key Features
+
+- **AI-Powered Mapping Analysis**: Uses Groq LLM to analyze MapStruct mappers and extract complex business logic
+- **JSON Transformation**: Transform complex nested JSON structures using MapStruct
+- **Reverse Engineering**: Generate JSON mapping rules from existing MapStruct annotations with AI assistance
+- **Helper Class Analysis**: Automatically detects and analyzes helper classes with custom business logic
+- **Business Rule Extraction**: Identifies custom calculations, transformations, and validation rules
+- **Collection Handling**: Supports complex collection mappings with item-level transformations
+- **Nested Mapping Detection**: Automatically detects nested property mappings (e.g., `address.country`)
+- **Post-Processing Rules**: Extracts `@AfterMapping` methods and their effects
+- **REST API**: Comprehensive REST endpoints for all transformation operations
+- **Web Interface**: User-friendly web interface with real-time testing capabilities
+
+## 🏗️ Project Structure
 
 ```
 src/main/java/com/esb/llm/ESBLlmDemo/
@@ -12,445 +25,486 @@ src/main/java/com/esb/llm/ESBLlmDemo/
 │   ├── OfficeDetails.java         # Office details model
 │   ├── WorkExperience.java        # Work experience model
 │   ├── TargetEmployee.java        # Target employee model
-│   └── TargetWorkExperience.java  # Target work experience model
+│   ├── TargetWorkExperience.java  # Target work experience model
+│   ├── SourceDto.java             # Source DTO for testing
+│   ├── TargetDto.java             # Target DTO for testing
+│   ├── User.java                  # User model
+│   ├── TargetUser.java            # Target user model
+│   ├── Product.java               # Product model
+│   ├── TargetProduct.java         # Target product model
+│   ├── Order.java                 # Order model
+│   └── TargetOrder.java           # Target order model
 ├── mapper/                        # MapStruct mappers
-│   └── EmployeeMapper.java        # Employee to TargetEmployee mapper
+│   ├── EmployeeMapper.java        # Employee to TargetEmployee mapper
+│   ├── SourceTargetMapper.java    # Source to Target DTO mapper with helper
+│   ├── UserMapper.java            # User mapper
+│   ├── ProductMapper.java         # Product mapper
+│   ├── OrderMapper.java           # Order mapper
+│   └── UserMapperHelp.java        # Helper class with business logic
 ├── config/                        # Configuration classes
 │   └── MappingRules.java          # JSON mapping rules configuration
 ├── service/                       # Business logic services
 │   ├── JsonTransformationService.java              # Main transformation service
-│   ├── MappingRulesGeneratorService.java           # Reverse engineering service
+│   ├── EnhancedMapStructJsonRuleGeneratorService.java  # AI-powered mapping analysis
+│   ├── MapStructJsonRuleGeneratorService.java      # Basic mapping analysis
+│   ├── MapStructBasedMappingRulesGeneratorService.java # MapStruct-based generator
 │   ├── GenericMappingRulesGeneratorService.java    # Generic mapping rules generator
 │   └── JsonTransformationServiceTest.java          # Test demonstration
 ├── controller/                    # REST API controllers
-│   └── JsonTransformationController.java           # REST endpoints
+│   ├── JsonTransformationController.java           # Basic transformation endpoints
+│   ├── EnhancedJsonRuleGeneratorController.java    # AI-powered mapping endpoints
+│   ├── JsonRuleGeneratorController.java            # Mapping rule endpoints
+│   └── SourceTargetController.java                 # Source/Target testing endpoints
 └── EsbLlmDemoApplication.java     # Main Spring Boot application
 ```
 
-## Features
+## 🔧 Technology Stack
 
-- **JSON Transformation**: Transform complex nested JSON structures using MapStruct
-- **Reverse Engineering**: Generate JSON mapping rules from existing MapStruct annotations
-- **Generic Mapping Rules Generation**: Automatically generate mapping rules by comparing any source and target JSON structures
-- **JSON Structure Analysis**: Analyze JSON structures and generate documentation mapping rules
-- **REST API**: Expose transformation functionality via REST endpoints
-- **Mapping Rules**: Configurable mapping rules for different transformation scenarios
-- **Validation**: Input validation and error handling
-- **Test Suite**: Built-in test demonstration with sample data
-- **Web Interface**: User-friendly web interface with tabbed functionality
+- **Spring Boot 3.5.0**: Main application framework
+- **MapStruct**: Annotation-based object mapping
+- **Groq LLM API**: AI-powered code analysis (llama3-8b-8192 model)
+- **Jackson**: JSON processing
+- **Gradle**: Build tool
+- **Java 21**: Programming language
 
-## Mapping Rules
-
-The application implements the following JSON transformation rules:
-
-### Source to Target Mapping
-
-| Source Field | Target Field | Description |
-|--------------|--------------|-------------|
-| `employeeId` | `employeeId` | Employee ID (unchanged) |
-| `name` | `employeename` | Employee name |
-| `age` | `age` | Employee age (unchanged) |
-| `gender` | `gender` | Employee gender (unchanged) |
-| `address.country` | `emplocation` | Employee location (from address) |
-| `officeDetails.location` | `officelocation` | Office location |
-| `workExperience[*].company` | `workExperience[*].company` | Work experience companies only |
-
-### Example Transformation
-
-**Source JSON:**
-```json
-[
-  {
-    "employeeId": "E001",
-    "name": "John Doe",
-    "gender": "Male",
-    "age": 30,
-    "address": {
-      "street": "123 Main St",
-      "city": "New York",
-      "state": "NY",
-      "zipcode": "10001",
-      "country": "USA"
-    },
-    "officeDetails": {
-      "department": "Engineering",
-      "designation": "Software Developer",
-      "location": "New York HQ",
-      "employeeType": "Full-Time"
-    },
-    "workExperience": [
-      {
-        "company": "ABC Tech",
-        "role": "Software Engineer",
-        "startDate": "2018-01-01",
-        "endDate": "2020-12-31",
-        "location": "Chicago"
-      }
-    ]
-  }
-]
-```
-
-**Target JSON:**
-```json
-[
-  {
-    "employeeId": "E001",
-    "employeename": "John Doe",
-    "age": 30,
-    "gender": "Male",
-    "emplocation": "USA",
-    "officelocation": "New York HQ",
-    "workExperience": [
-      {
-        "company": "ABC Tech"
-      }
-    ]
-  }
-]
-```
-
-## Reverse Engineering
-
-The application includes a **reverse engineering** feature that analyzes MapStruct annotations and generates JSON mapping rules automatically.
-
-### Generated Mapping Rules
-
-When you call the reverse engineering endpoint, it generates rules like this:
-
-```json
-{
-  "sourceContentType": "JSON",
-  "targetContentType": "JSON",
-  "conversionRules": [
-    {
-      "propID": "EmployeeList",
-      "sourceLocation": "$",
-      "targetLocation": "$",
-      "isArray": true,
-      "items": [
-        {
-          "propID": "EMPLOYEE_ID",
-          "sourceLocation": "employeeId",
-          "targetLocation": "employeeId",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "EMPLOYEE_NAME",
-          "sourceLocation": "name",
-          "targetLocation": "employeename",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "AGE",
-          "sourceLocation": "age",
-          "targetLocation": "age",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "GENDER",
-          "sourceLocation": "gender",
-          "targetLocation": "gender",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "EMP_LOCATION",
-          "sourceLocation": "address.country",
-          "targetLocation": "emplocation",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "OFFICE_LOCATION",
-          "sourceLocation": "officeDetails.location",
-          "targetLocation": "officelocation",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "WORK_EXP",
-          "sourceLocation": "workExperience",
-          "targetLocation": "workExperience",
-          "isArray": true,
-          "items": [
-            {
-              "propID": "WORK_EXP_COMPANY",
-              "sourceLocation": "company",
-              "targetLocation": "company",
-              "isArray": false,
-              "items": null
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Generic Mapping Rules Generation
-
-The application includes a **generic mapping rules generator** that can analyze any source and target JSON structures to automatically generate mapping rules.
-
-### Features
-
-- **Automatic Field Matching**: Intelligently matches fields between source and target JSON
-- **Nested Object Support**: Handles complex nested object structures
-- **Array Mapping**: Supports array-to-array transformations
-- **Smart Field Detection**: Uses direct, case-insensitive, and partial matching
-- **Unmapped Field Detection**: Identifies fields that don't have clear mappings
-
-### Example Generic Generation
-
-**Source JSON:**
-```json
-{
-  "id": "123",
-  "title": "Sample Title",
-  "description": "Sample Description",
-  "metadata": {
-    "created": "2023-01-01",
-    "updated": "2023-01-02"
-  }
-}
-```
-
-**Target JSON:**
-```json
-{
-  "documentId": "123",
-  "documentTitle": "Sample Title",
-  "documentDescription": "Sample Description",
-  "documentMetadata": {
-    "creationDate": "2023-01-01",
-    "lastModified": "2023-01-02"
-  }
-}
-```
-
-**Generated Mapping Rules:**
-```json
-{
-  "sourceContentType": "JSON",
-  "targetContentType": "JSON",
-  "conversionRules": [
-    {
-      "propID": "RootObject",
-      "sourceLocation": "$",
-      "targetLocation": "$",
-      "isArray": false,
-      "items": [
-        {
-          "propID": "ROOT_DOCUMENTID",
-          "sourceLocation": "id",
-          "targetLocation": "documentId",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "ROOT_DOCUMENTTITLE",
-          "sourceLocation": "title",
-          "targetLocation": "documentTitle",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "ROOT_DOCUMENTDESCRIPTION",
-          "sourceLocation": "description",
-          "targetLocation": "documentDescription",
-          "isArray": false,
-          "items": null
-        },
-        {
-          "propID": "ROOT_DOCUMENTMETADATA",
-          "sourceLocation": "metadata",
-          "targetLocation": "documentMetadata",
-          "isArray": false,
-          "items": [
-            {
-              "propID": "ROOT_DOCUMENTMETADATA_CREATIONDATE",
-              "sourceLocation": "created",
-              "targetLocation": "creationDate",
-              "isArray": false,
-              "items": null
-            },
-            {
-              "propID": "ROOT_DOCUMENTMETADATA_LASTMODIFIED",
-              "sourceLocation": "updated",
-              "targetLocation": "lastModified",
-              "isArray": false,
-              "items": null
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## API Endpoints
-
-### 1. Transform JSON (MapStruct)
-```
-POST /api/transform/json
-Content-Type: application/json
-
-{
-  "sourceJson": "your_source_json_string_here"
-}
-```
-
-### 2. Generate Mapping Rules (Reverse Engineering)
-```
-GET /api/transform/rules/generate
-```
-
-### 3. Generate Mapping Rules from JSON Comparison (Generic)
-```
-POST /api/transform/rules/generate-from-json
-Content-Type: application/json
-
-{
-  "sourceJson": "your_source_json_string_here",
-  "targetJson": "your_target_json_string_here"
-}
-```
-
-### 4. Analyze JSON Structure
-```
-POST /api/transform/rules/analyze-structure
-Content-Type: application/json
-
-{
-  "jsonStructure": "your_json_structure_here"
-}
-```
-
-### 5. Get Default Mapping Rules
-```
-GET /api/transform/rules/default
-```
-
-### 6. Health Check
-```
-GET /api/transform/health
-```
-
-## Web Interface
-
-The application provides a comprehensive web interface with three main tabs:
-
-### 1. JSON Transformation Tab
-- Transform source JSON using MapStruct
-- Load sample data
-- View transformation results
-
-### 2. Mapping Rules Generation Tab
-- Generate rules from MapStruct annotations
-- Generate rules from JSON comparison
-- Side-by-side JSON input for comparison
-
-### 3. Structure Analysis Tab
-- Analyze JSON structure for documentation
-- Generate mapping rules for structure analysis
-- Load sample complex structures
-
-## Running the Application
+## 🚀 Quick Start
 
 ### Prerequisites
+
 - Java 21 or higher
-- Gradle 7.0 or higher
+- Gradle 8.0 or higher
+- Groq API key (for AI-powered features)
 
-### Build and Run
-```bash
-# Build the project
-./gradlew build
+### Installation
 
-# Run the application
-./gradlew bootRun
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd ESBLlmDemo
+   ```
+
+2. **Configure Groq API Key**
+   ```bash
+   # The API key is already configured in the service
+   # You can update it in EnhancedMapStructJsonRuleGeneratorService.java if needed
+   ```
+
+3. **Build the project**
+   ```bash
+   ./gradlew build
+   ```
+
+4. **Run the application**
+   ```bash
+   ./gradlew bootRun
+   ```
+
+5. **Access the application**
+   - Web Interface: http://localhost:8183
+   - API Base URL: http://localhost:8183/api
+
+## 📡 REST API Endpoints
+
+### 1. Basic JSON Transformation
+
+#### Transform JSON using predefined rules
+```http
+POST /api/transform
+Content-Type: application/json
+
+{
+  "sourceJson": "[{\"employeeId\":\"E001\",\"name\":\"John Doe\",...}]"
+}
 ```
 
-The application will start on `http://localhost:8082`
+#### Transform JSON with custom rules
+```http
+POST /api/transform-with-rules
+Content-Type: application/json
 
-### Test the Transformation
-The application includes a built-in test that runs automatically on startup, demonstrating the transformation with the provided sample data.
-
-### Test Generic Mapping Rules Generation
-Use the web interface at `http://localhost:8082` and navigate to the "Mapping Rules Generation" tab to test the generic functionality.
-
-## Dependencies
-
-- **Spring Boot 3.5.0**: Main framework
-- **MapStruct 1.5.5.Final**: Annotation-based mapping library
-- **Jackson**: JSON processing
-
-## Configuration
-
-The mapping rules are defined in `EmployeeMapper.java` using MapStruct annotations and can be reverse-engineered into JSON format using the `MappingRulesGeneratorService`. The generic mapping rules are generated dynamically using the `GenericMappingRulesGeneratorService`.
-
-## Error Handling
-
-The application includes comprehensive error handling:
-- Input validation for JSON format
-- Transformation error handling
-- REST API error responses
-- Detailed error messages for debugging
-- Field mapping validation
-
-## Extensibility
-
-The architecture is designed to be easily extensible:
-- Add new model classes for different data structures
-- Create new MapStruct mappers for different transformation scenarios
-- Extend the service layer with additional transformation logic
-- Add new REST endpoints for specific use cases
-- Reverse engineer mapping rules from any MapStruct mapper
-- Use generic mapping rules generation for any JSON structure
-
-## Testing
-
-The application includes:
-- Unit tests for the transformation service
-- Unit tests for the reverse engineering service
-- Unit tests for the generic mapping rules generator
-- Integration tests for REST endpoints
-- Built-in demonstration with sample data
-- Validation tests for input data
-
-Run tests with:
-```bash
-./gradlew test
+{
+  "sourceJson": "[{\"employeeId\":\"E001\",\"name\":\"John Doe\",...}]",
+  "mappingRules": {
+    "conversionRules": [...]
+  }
+}
 ```
 
-## Generic Mapping Rules Generation Workflow
+### 2. AI-Powered Mapping Analysis
 
-1. **Input Source and Target JSON**: Provide source and target JSON structures
-2. **Automatic Analysis**: The service analyzes both structures
-3. **Field Matching**: Intelligently matches fields using multiple strategies
-4. **Rule Generation**: Creates comprehensive mapping rules
-5. **Output**: Returns structured mapping rules in JSON format
+#### Generate JSON rules from mapper class name (AI-powered)
+```http
+POST /api/enhanced/generate-rules
+Content-Type: application/json
 
-### Field Matching Strategies
+{
+  "mapperName": "SourceTargetMapper"
+}
+```
 
-1. **Direct Match**: Exact field name match
-2. **Case-Insensitive Match**: Ignores case differences
-3. **Partial Match**: Matches fields that contain similar terms
-4. **Unmapped Detection**: Identifies fields without clear mappings
+#### Generate JSON rules for all available mappers
+```http
+GET /api/enhanced/generate-all-rules
+```
 
-## Reverse Engineering Workflow
+#### Get available mappers list
+```http
+GET /api/enhanced/available-mappers
+```
 
-1. **Define MapStruct Mapper**: Create mapper interfaces with `@Mapping` annotations
-2. **Generate Implementation**: MapStruct generates implementation at compile time
-3. **Reverse Engineer Rules**: Use the service to extract mapping rules from annotations
-4. **Use Generated Rules**: Apply the generated rules for documentation or other systems
+### 3. Basic Mapping Analysis
 
-This approach provides a **bidirectional workflow** where you can:
-- Start with MapStruct annotations and generate JSON rules
-- Start with JSON rules and implement MapStruct mappers
-- Use generic generation for any JSON structure
-- Maintain consistency between both representations 
+#### Generate JSON rules from mapper class name
+```http
+POST /api/generate-rules
+Content-Type: application/json
+
+{
+  "mapperName": "EmployeeMapper"
+}
+```
+
+#### Generate mapping rules from source and target JSON
+```http
+POST /api/generate-rules-from-json
+Content-Type: application/json
+
+{
+  "sourceJson": "[{\"employeeId\":\"E001\",\"name\":\"John Doe\",...}]",
+  "targetJson": "[{\"employeeId\":\"E001\",\"employeename\":\"John Doe\",...}]"
+}
+```
+
+### 4. Source/Target Testing
+
+#### Test SourceTargetMapper transformation
+```http
+POST /api/source-target/transform
+Content-Type: application/json
+
+{
+  "sourceDto": {
+    "id": "123",
+    "name": "John Doe",
+    "age": 30,
+    "salary": 50000,
+    "doj": "2020-01-01",
+    "emailList": ["john@example.com"],
+    "phoneNumbers": ["1234567890"]
+  }
+}
+```
+
+#### Get sample source data
+```http
+GET /api/source-target/sample-source
+```
+
+#### Get sample target data
+```http
+GET /api/source-target/sample-target
+```
+
+## 🧪 Testing the Endpoints
+
+### 1. Using cURL
+
+#### Test AI-powered mapping analysis
+```bash
+curl -X POST http://localhost:8183/api/enhanced/generate-rules \
+  -H "Content-Type: application/json" \
+  -d '{"mapperName": "SourceTargetMapper"}'
+```
+
+#### Test JSON transformation
+```bash
+curl -X POST http://localhost:8183/api/transform \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceJson": "[{\"employeeId\":\"E001\",\"name\":\"John Doe\",\"gender\":\"Male\",\"age\":30,\"address\":{\"country\":\"USA\"},\"officeDetails\":{\"location\":\"New York HQ\"},\"workExperience\":[{\"company\":\"ABC Tech\"}]}]"
+  }'
+```
+
+#### Test SourceTargetMapper with helper class
+```bash
+curl -X POST http://localhost:8183/api/source-target/transform \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceDto": {
+      "id": "123",
+      "name": "John Doe",
+      "age": 30,
+      "salary": 50000,
+      "doj": "2020-01-01",
+      "emailList": ["john@example.com"],
+      "phoneNumbers": ["1234567890"]
+    }
+  }'
+```
+
+### 2. Using Web Interface
+
+1. Open http://localhost:8183 in your browser
+2. Navigate to the "AI-Powered Mapping Analysis" tab
+3. Select a mapper from the dropdown (e.g., "SourceTargetMapper")
+4. Click "Generate Rules" to see AI-analyzed mapping rules
+5. View the comprehensive JSON output with business logic extraction
+
+### 3. Using Postman
+
+Import these sample requests:
+
+#### AI-Powered Mapping Analysis
+```json
+{
+  "method": "POST",
+  "url": "http://localhost:8183/api/enhanced/generate-rules",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "mode": "raw",
+    "raw": "{\"mapperName\": \"SourceTargetMapper\"}"
+  }
+}
+```
+
+#### JSON Transformation
+```json
+{
+  "method": "POST",
+  "url": "http://localhost:8183/api/transform",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "mode": "raw",
+    "raw": "{\"sourceJson\": \"[{\\\"employeeId\\\":\\\"E001\\\",\\\"name\\\":\\\"John Doe\\\",\\\"gender\\\":\\\"Male\\\",\\\"age\\\":30,\\\"address\\\":{\\\"country\\\":\\\"USA\\\"},\\\"officeDetails\\\":{\\\"location\\\":\\\"New York HQ\\\"},\\\"workExperience\\\":[{\\\"company\\\":\\\"ABC Tech\\\"}]}]\"}"
+  }
+}
+```
+
+## 🔍 AI-Powered Features
+
+### 1. Enhanced Mapping Analysis
+
+The AI-powered service can analyze complex MapStruct mappers and extract:
+
+- **Mapping Annotations**: All `@Mapping` annotations with source/target properties
+- **Nested Mappings**: Properties with dots (e.g., `address.country`)
+- **Collection Mappings**: List, Set, and array processing
+- **Helper Classes**: `@Mapper(uses = {...})` helper classes and their business logic
+- **Business Rules**: Custom calculations, transformations, and validation rules
+- **Post-Processing**: `@AfterMapping` methods and their effects
+- **Dependencies**: Relationships between mapping rules
+
+### 2. Example AI Analysis Output
+
+For the `SourceTargetMapper` with `UserMapperHelp` helper class:
+
+```json
+{
+  "sourceContentType": "JSON",
+  "targetContentType": "JSON",
+  "mapperInfo": {
+    "mapperName": "SourceTargetMapper",
+    "helperClasses": ["UserMapperHelp"],
+    "afterMappingMethods": ["setAdjustedSalary"],
+    "hasNestedMappings": false,
+    "hasCollections": true
+  },
+  "conversionRules": [
+    {
+      "propID": "USER_ID",
+      "sourceLocation": "id",
+      "targetLocation": "userId",
+      "isArray": false,
+      "nestedMapping": false,
+      "transformationType": "direct",
+      "businessRule": "",
+      "helperClass": "",
+      "helperMethod": "",
+      "collectionType": null,
+      "itemTransformation": "",
+      "validationRules": [],
+      "defaultValue": "",
+      "description": "Maps id from source to userId in target"
+    },
+    {
+      "propID": "EMAILS",
+      "sourceLocation": "emailList",
+      "targetLocation": "emails",
+      "isArray": true,
+      "nestedMapping": false,
+      "transformationType": "collection",
+      "businessRule": "",
+      "helperClass": "",
+      "helperMethod": "",
+      "collectionType": "List",
+      "itemTransformation": "",
+      "validationRules": [],
+      "defaultValue": "",
+      "description": "Maps emailList from source to emails in target"
+    }
+  ],
+  "postProcessingRules": [
+    {
+      "methodName": "setAdjustedSalary",
+      "description": "Calculates adjusted salary using UserMapperHelp helper class",
+      "dependencies": ["SALARY", "AGE", "DOJ"],
+      "businessLogic": "Uses UserMapperHelp.calculateAdjustedSalary() to apply experience bonus, performance multiplier, and market adjustment factors"
+    }
+  ],
+  "businessRules": [
+    {
+      "ruleId": "SALARY_ADJUSTMENT",
+      "description": "Salary adjustment based on experience and performance",
+      "logic": "Calculates experience bonus (5% per year, capped at 50%), performance multiplier based on age and experience, and market adjustment factor",
+      "appliesTo": ["SALARY"]
+    }
+  ]
+}
+```
+
+### 3. Helper Class Analysis
+
+The AI can analyze helper classes like `UserMapperHelp` and extract:
+
+- **Custom Calculation Methods**: `calculateAdjustedSalary()`, `calculateExperienceBonus()`
+- **Business Logic**: Performance multipliers, market adjustments
+- **Validation Rules**: Null checks, boundary conditions
+- **Mathematical Operations**: Complex salary calculations with multiple factors
+
+## 📊 Available Mappers
+
+The system includes several pre-configured mappers for testing:
+
+1. **EmployeeMapper**: Basic employee transformation with nested mappings
+2. **SourceTargetMapper**: Complex mapping with helper class and business logic
+3. **UserMapper**: User data transformation
+4. **ProductMapper**: Product catalog transformation
+5. **OrderMapper**: Order processing transformation
+
+## 🔧 Configuration
+
+### Application Properties
+
+```properties
+# Server configuration
+server.port=8183
+
+# Logging configuration
+logging.level.com.esb.llm=DEBUG
+logging.level.org.springframework.web=DEBUG
+
+# Groq API configuration (configured in service)
+groq.api.key=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
+groq.model=llama3-8b-8192
+```
+
+### Customizing Mappers
+
+To add new mappers:
+
+1. Create mapper interface in `src/main/java/com/esb/llm/ESBLlmDemo/mapper/`
+2. Add `@Mapper` annotation with helper classes if needed
+3. Define mapping methods with `@Mapping` annotations
+4. Add `@AfterMapping` methods for post-processing if required
+5. Update `getAvailableMappers()` method in `EnhancedMapStructJsonRuleGeneratorService`
+
+## 🧪 Testing Scenarios
+
+### 1. Basic Transformation Test
+
+```bash
+# Test employee transformation
+curl -X POST http://localhost:8183/api/transform \
+  -H "Content-Type: application/json" \
+  -d @test-data/employee-source.json
+```
+
+### 2. AI Analysis Test
+
+```bash
+# Test AI-powered analysis of SourceTargetMapper
+curl -X POST http://localhost:8183/api/enhanced/generate-rules \
+  -H "Content-Type: application/json" \
+  -d '{"mapperName": "SourceTargetMapper"}'
+```
+
+### 3. Helper Class Test
+
+```bash
+# Test transformation with helper class business logic
+curl -X POST http://localhost:8183/api/source-target/transform \
+  -H "Content-Type: application/json" \
+  -d @test-data/source-dto.json
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Port Already in Use**
+   ```bash
+   # Kill process using port 8183
+   netstat -ano | findstr :8183
+   taskkill /PID <PID> /F
+   ```
+
+2. **Groq API Errors**
+   - Check API key configuration
+   - Verify network connectivity
+   - Check API rate limits
+
+3. **Build Errors**
+   ```bash
+   # Clean and rebuild
+   ./gradlew clean build
+   ```
+
+### Debug Mode
+
+Enable debug logging:
+
+```properties
+logging.level.com.esb.llm=DEBUG
+logging.level.org.springframework.web=DEBUG
+```
+
+## 📈 Performance Considerations
+
+- **AI Analysis**: Groq API calls may take 1-3 seconds
+- **Large JSON**: For large JSON structures, consider chunking
+- **Caching**: Consider implementing caching for frequently used mappers
+- **Rate Limiting**: Groq API has rate limits; implement retry logic for production
+
+## 🔒 Security Considerations
+
+- **API Key**: Store Groq API key securely (use environment variables in production)
+- **Input Validation**: All inputs are validated before processing
+- **Error Handling**: Comprehensive error handling prevents information leakage
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the troubleshooting section
+2. Review the API documentation
+3. Create an issue in the repository
+4. Contact the development team
+
+---
+
+**Note**: This application demonstrates advanced JSON transformation capabilities with AI-powered analysis. The Groq LLM integration provides intelligent mapping rule generation that can understand complex business logic and helper classes. 
