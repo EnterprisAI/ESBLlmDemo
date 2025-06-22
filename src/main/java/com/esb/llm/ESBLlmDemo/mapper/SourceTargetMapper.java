@@ -8,10 +8,10 @@ import org.mapstruct.*;
 public interface SourceTargetMapper {
 
     @Mapping(source = "id", target = "userId")
-    @Mapping(source = "emailList", target = "emails")
+//    @Mapping(source = "emailList", target = "emails")
     @Mapping(source = "phoneNumbers", target = "phoneNumberList")
     @Mapping(source = "doj", target = "doj")
-    @Mapping(target = "salary", expression = "java(calculateSalaryWithAdjustment(sourceDto))")
+//    @Mapping(target = "salary", expression = "java(calculateSalaryWithAdjustment(sourceDto))")
     TargetDto sourceDtoToTargetDto(SourceDto sourceDto);
 
     default java.math.BigDecimal calculateSalaryWithAdjustment(SourceDto sourceDto) {
