@@ -68,34 +68,19 @@ public class EnhancedMapStructJsonRuleGeneratorServiceTest {
     }
 
     @Test
-    public void testGenerateJsonRulesWithOllama() {
-        System.out.println("=== Testing Ollama Integration ===");
+    public void testGenerateJsonRulesWithGroq() {
+        System.out.println("=== Testing Groq Integration ===");
         
         String mapperName = "EmployeeMapper";
-        String mapperCode = """
-            @Mapper(componentModel = "spring")
-            public interface EmployeeMapper {
-                @Mappings({
-                    @Mapping(source = "employeeId", target = "employeeId"),
-                    @Mapping(source = "name", target = "employeename"),
-                    @Mapping(source = "age", target = "age"),
-                    @Mapping(source = "gender", target = "gender"),
-                    @Mapping(source = "address.country", target = "emplocation"),
-                    @Mapping(source = "officeDetails.location", target = "officelocation"),
-                    @Mapping(source = "workExperience", target = "workExperience")
-                })
-                TargetEmployee employeeToTargetEmployee(Employee employee);
-            }
-            """;
         
         try {
-            String rules = enhancedJsonRuleGeneratorService.generateJsonRulesWithOllama(mapperName, mapperCode);
+            String rules = enhancedJsonRuleGeneratorService.generateJsonRulesWithGroq(mapperName);
             
             assertNotNull(rules);
-            System.out.println("Generated rules with Ollama:");
+            System.out.println("Generated rules with Groq:");
             System.out.println(rules);
         } catch (Exception e) {
-            System.out.println("Ollama test failed (expected if Ollama is not running): " + e.getMessage());
+            System.out.println("Groq test failed (expected if Groq API is not accessible): " + e.getMessage());
         }
         
         System.out.println("=== Test Complete ===\n");

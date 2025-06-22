@@ -27,7 +27,7 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     private final RestTemplate restTemplate = new RestTemplate();
     private static final String GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String GROQ_API_KEY = "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";
-    private static final String GROQ_MODEL = "llama3.1-8b-instant";
+    private static final String GROQ_MODEL = "llama3-8b-8192";
 
     /**
      * Generate JSON conversion rules from a MapStruct mapper interface
