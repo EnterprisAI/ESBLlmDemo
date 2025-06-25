@@ -210,11 +210,13 @@ public class EnhancedJsonRuleGeneratorController {
     @GetMapping("/combined-json-rules/{mapperName}")
     public ResponseEntity<String> getCombinedJsonRules(@PathVariable String mapperName) {
         try {
-            String json = enhancedJsonRuleGeneratorService.generateCombinedJsonRules(mapperName);
-            return ResponseEntity.ok(json);
+            String json = genericMapStructAnalyzer.generateJsonRules(mapperName);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(json);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error generating combined JSON rules: " + e.getMessage());
+                    .body("Error generating combined JSON rules: " + e.getMessage());
         }
     }
 
@@ -224,11 +226,12 @@ public class EnhancedJsonRuleGeneratorController {
     @GetMapping("/groq-prompt-combined/{mapperName}")
     public ResponseEntity<String> getGroqPromptCombined(@PathVariable String mapperName) {
         try {
-            String prompt = enhancedJsonRuleGeneratorService.createGroqPromptCombined(mapperName);
+            Map<String, Object> analysis = genericMapStructAnalyzer.analyzeMapper(mapperName);
+            String prompt = genericMapStructAnalyzer.generateGroqPrompt(analysis);
             return ResponseEntity.ok(prompt);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error generating Groq prompt: " + e.getMessage());
+                    .body("Error generating Groq prompt: " + e.getMessage());
         }
     }
 

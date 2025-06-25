@@ -71,39 +71,78 @@ public class GenericMapStructAnalyzer {
     public String generateJsonRules(String mapperName) {
         Map<String, Object> analysis = analyzeMapper(mapperName);
         
+        // Add source and target content types to analysis
+        analysis.put("sourceContentType", determineSourceContentType(mapperName));
+        analysis.put("targetContentType", determineTargetContentType(mapperName));
+        
         Map<String, Object> jsonRules = new LinkedHashMap<>();
-        jsonRules.put("sourceContentType", determineSourceContentType(mapperName));
-        jsonRules.put("targetContentType", determineTargetContentType(mapperName));
+        jsonRules.put("sourceContentType", "JSON");
+        jsonRules.put("targetContentType", "JSON");
         
         List<Map<String, Object>> conversionRules = new ArrayList<>();
         
-        // Add direct mappings
+        // Create the main array rule
+        Map<String, Object> mainArrayRule = new LinkedHashMap<>();
+        mainArrayRule.put("propID", getMainArrayPropId(mapperName));
+        mainArrayRule.put("sourceLocation", "$");
+        mainArrayRule.put("targetLocation", "$");
+        mainArrayRule.put("isArray", true);
+        
+        List<Map<String, Object>> items = new ArrayList<>();
+        
+        // Add direct mappings as items
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> directMappings = (List<Map<String, Object>>) analysis.get("directMappings");
         for (Map<String, Object> mapping : directMappings) {
-            Map<String, Object> rule = new LinkedHashMap<>();
-            rule.put("propID", mapping.get("propID"));
-            rule.put("sourceLocation", mapping.get("sourceLocation"));
-            rule.put("targetLocation", mapping.get("targetLocation"));
-            rule.put("isArray", mapping.get("isArray"));
-            rule.put("isCustom", false);
-            conversionRules.add(rule);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("propID", mapping.get("propID"));
+            item.put("sourceLocation", mapping.get("sourceLocation"));
+            item.put("targetLocation", mapping.get("targetLocation"));
+            
+            // Check if this is an array field
+            if (Boolean.TRUE.equals(mapping.get("isArray"))) {
+                item.put("isArray", true);
+                // Add nested items for array fields
+                List<Map<String, Object>> nestedItems = new ArrayList<>();
+                Map<String, Object> nestedItem = new LinkedHashMap<>();
+                nestedItem.put("propID", mapping.get("propID") + "_ITEM");
+                nestedItem.put("sourceLocation", mapping.get("sourceLocation") + "[*]");
+                nestedItem.put("targetLocation", mapping.get("targetLocation") + "[*]");
+                nestedItems.add(nestedItem);
+                item.put("items", nestedItems);
+            }
+            
+            items.add(item);
         }
         
-        // Add custom mappings
+        // Add custom mappings as items
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> customMappings = (List<Map<String, Object>>) analysis.get("customMappings");
         for (Map<String, Object> mapping : customMappings) {
-            Map<String, Object> rule = new LinkedHashMap<>();
-            rule.put("propID", mapping.get("propID"));
-            rule.put("sourceLocation", mapping.get("sourceLocation"));
-            rule.put("targetLocation", mapping.get("targetLocation"));
-            rule.put("isArray", mapping.get("isArray"));
-            rule.put("isCustom", true);
-            rule.put("customLogic", mapping.get("customLogic"));
-            rule.put("methodDefinitions", mapping.get("methodDefinitions"));
-            conversionRules.add(rule);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("propID", mapping.get("propID"));
+            item.put("sourceLocation", mapping.get("sourceLocation"));
+            item.put("targetLocation", mapping.get("targetLocation"));
+            item.put("customLogic", mapping.get("customLogic"));
+            
+            // Check if this is an array field
+            if (Boolean.TRUE.equals(mapping.get("isArray"))) {
+                item.put("isArray", true);
+                // Add nested items for array fields
+                List<Map<String, Object>> nestedItems = new ArrayList<>();
+                Map<String, Object> nestedItem = new LinkedHashMap<>();
+                nestedItem.put("propID", mapping.get("propID") + "_ITEM");
+                nestedItem.put("sourceLocation", mapping.get("sourceLocation") + "[*]");
+                nestedItem.put("targetLocation", mapping.get("targetLocation") + "[*]");
+                nestedItems.add(nestedItem);
+                item.put("items", nestedItems);
+            }
+            
+            items.add(item);
         }
+        
+        mainArrayRule.put("items", items);
+        conversionRules.add(mainArrayRule);
         
         jsonRules.put("conversionRules", conversionRules);
         
@@ -112,6 +151,48 @@ public class GenericMapStructAnalyzer {
         } catch (Exception e) {
             throw new RuntimeException("Error generating JSON rules: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Generate a Groq prompt from the analysis results
+     */
+    public String generateGroqPrompt(Map<String, Object> analysis) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Generate JSON transformation rules for the following MapStruct mapper:\n\n");
+        
+        prompt.append("Source Content Type: ").append(analysis.get("sourceContentType")).append("\n");
+        prompt.append("Target Content Type: ").append(analysis.get("targetContentType")).append("\n\n");
+        
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> conversionRules = (List<Map<String, Object>>) analysis.get("conversionRules");
+        
+        if (conversionRules != null && !conversionRules.isEmpty()) {
+            prompt.append("Conversion Rules:\n");
+            for (Map<String, Object> rule : conversionRules) {
+                prompt.append("- ").append(rule.get("sourceLocation")).append(" -> ").append(rule.get("targetLocation"));
+                
+                if (Boolean.TRUE.equals(rule.get("isArray"))) {
+                    prompt.append(" (Array)");
+                }
+                
+                if (Boolean.TRUE.equals(rule.get("isCustom"))) {
+                    prompt.append(" (Custom Logic: ").append(rule.get("customLogic")).append(")");
+                    
+                    @SuppressWarnings("unchecked")
+                    List<String> methodDefinitions = (List<String>) rule.get("methodDefinitions");
+                    if (methodDefinitions != null && !methodDefinitions.isEmpty()) {
+                        prompt.append("\n  Method Definitions:");
+                        for (String methodDef : methodDefinitions) {
+                            prompt.append("\n    - ").append(methodDef);
+                        }
+                    }
+                }
+                prompt.append("\n");
+            }
+        }
+        
+        prompt.append("\nPlease provide the JSON transformation rules in the exact format shown above.");
+        return prompt.toString();
     }
 
     /**
@@ -223,21 +304,21 @@ public class GenericMapStructAnalyzer {
                 }
             }
             
-            // Create mapping entry
-            Map<String, Object> mapping = new LinkedHashMap<>();
-            mapping.put("propID", generatePropertyId(source, target));
-            mapping.put("sourceLocation", source.isEmpty() ? "inferred" : source);
-            mapping.put("targetLocation", target.isEmpty() ? "inferred" : target);
-            mapping.put("isArray", isArrayField(source, target));
+            // Create mapping rule
+            Map<String, Object> rule = new HashMap<>();
+            rule.put("propID", source + "Mapping");
+            rule.put("sourceLocation", source);
+            rule.put("targetLocation", target);
+            rule.put("isArray", isArrayField(source, target));
             
-            if (!expression.isEmpty()) {
-                // This is a custom mapping
-                mapping.put("customLogic", generateCustomLogic(expression));
-                mapping.put("methodDefinitions", extractMethodDefinitions(expression));
-                customMappings.add(mapping);
+            if (expression != null && !expression.isEmpty()) {
+                rule.put("isCustom", true);
+                rule.put("customLogic", generateCustomLogic(expression));
+                rule.put("methodDefinitions", extractMethodDefinitions(expression));
+                customMappings.add(rule);
             } else {
-                // This is a direct mapping
-                directMappings.add(mapping);
+                rule.put("isCustom", false);
+                directMappings.add(rule);
             }
         }
 
@@ -275,35 +356,174 @@ public class GenericMapStructAnalyzer {
         }
 
         private String generateCustomLogic(String expression) {
-            // Generic custom logic generation
+            // Log the original expression
+            System.out.println("[CustomLogic] Original expression: " + expression);
+            String logic = expression;
             if (expression.startsWith("java(") && expression.endsWith(")")) {
-                String logic = expression.substring(5, expression.length() - 1);
-                
-                // Replace common patterns with readable descriptions
-                logic = logic.replaceAll("source\\.get([A-Z][a-zA-Z]*)\\(\\)", "get $1 from source");
-                logic = logic.replaceAll("helper\\.([a-zA-Z]+)\\([^)]*\\)", "call helper method $1");
-                logic = logic.replaceAll("new ([A-Z][a-zA-Z]*)\\(\\)", "create new $1 instance");
-                
-                return "Custom calculation: " + logic;
+                logic = expression.substring(5, expression.length() - 1);
             }
-            return "Custom expression: " + expression;
+            logic = logic.replaceAll("\\s+", " ").trim();
+            System.out.println("[CustomLogic] Processed logic: " + logic);
+
+            // Robust regex for any calculate* helper method
+            java.util.regex.Pattern calcPattern = java.util.regex.Pattern.compile("\\b([A-Za-z0-9_]+)\\.?(calculate[A-Za-z0-9_]*)\\(");
+            java.util.regex.Matcher matcher = calcPattern.matcher(logic);
+            if (matcher.find()) {
+                String className = matcher.group(1);
+                String methodName = matcher.group(2);
+                System.out.println("[CustomLogic] Matched helper: " + className + "." + methodName);
+                switch (methodName) {
+                    case "calculateEmployeeSalary":
+                        return "Step 1: Get employee age from source\n" +
+                               "Step 2: Calculate total years of experience from work history\n" +
+                               "Step 3: Get department from office details\n" +
+                               "Step 4: Apply age-based multiplier (25-35: 1.1x, 35-45: 1.2x, 45+: 1.3x)\n" +
+                               "Step 5: Apply experience multiplier (5% per year, capped at 50%)\n" +
+                               "Step 6: Apply department multiplier (Engineering: 1.15x, Marketing: 1.1x, Sales: 1.2x)\n" +
+                               "Step 7: Calculate final salary = baseSalary * ageMultiplier * experienceMultiplier * departmentMultiplier\n" +
+                               "Step 8: Return calculated salary";
+                    case "calculateExperienceLevel":
+                        return "Step 1: Calculate total years of experience from work history\n" +
+                               "Step 2: Get employee age from source\n" +
+                               "Step 3: If experience < 2 years: return 'Junior'\n" +
+                               "Step 4: If experience 2-5 years: return 'Mid-Level'\n" +
+                               "Step 5: If experience 5-10 years: return 'Senior'\n" +
+                               "Step 6: If experience >= 10 years AND age >= 35: return 'Expert'\n" +
+                               "Step 7: Otherwise: return 'Senior'\n" +
+                               "Step 8: Return determined experience level";
+                    case "calculatePerformanceScore":
+                        return "Step 1: Get employee age from source\n" +
+                               "Step 2: Calculate total years of experience from work history\n" +
+                               "Step 3: Get employee type from office details\n" +
+                               "Step 4: Get department from office details\n" +
+                               "Step 5: Start with base score of 5.0\n" +
+                               "Step 6: Add age bonus (25-40: +1.0, 40+: +0.5)\n" +
+                               "Step 7: Add experience bonus (3-8 years: +1.5, 8+ years: +1.0)\n" +
+                               "Step 8: Add employee type bonus (Full-Time: +0.5)\n" +
+                               "Step 9: Add department bonus (Engineering: +0.3, Sales: +0.2)\n" +
+                               "Step 10: Cap final score at 10.0\n" +
+                               "Step 11: Return calculated performance score";
+                    case "calculateUserAge":
+                        return "Step 1: Get date of birth from user\n" +
+                               "Step 2: Calculate period between birth date and current date\n" +
+                               "Step 3: Extract years from period\n" +
+                               "Step 4: Return calculated age in years";
+                    case "calculateAccountStatus":
+                        return "Step 1: Get user active status\n" +
+                               "Step 2: Get user registration date\n" +
+                               "Step 3: Calculate days since registration\n" +
+                               "Step 4: If active is true AND days since registration > 30: return 'Active'\n" +
+                               "Step 5: If active is true AND days since registration <= 30: return 'New'\n" +
+                               "Step 6: If active is false: return 'Inactive'\n" +
+                               "Step 7: Return determined account status";
+                    case "calculateProductRating":
+                        return "Step 1: Get product specifications from product\n" +
+                               "Step 2: Extract quality rating from specifications\n" +
+                               "Step 3: Get product price\n" +
+                               "Step 4: Calculate price-quality ratio\n" +
+                               "Step 5: Apply rating algorithm based on ratio\n" +
+                               "Step 6: Return calculated product rating";
+                    case "calculateAvailabilityStatus":
+                        return "Step 1: Get stock level from product inventory\n" +
+                               "Step 2: If stock level > 10: return 'In Stock'\n" +
+                               "Step 3: If stock level 1-10: return 'Low Stock'\n" +
+                               "Step 4: If stock level = 0: return 'Out of Stock'\n" +
+                               "Step 5: Return determined availability status";
+                    default:
+                        System.out.println("[CustomLogic] Matched generic calculate* method: " + methodName);
+                        return "Step 1: Extract input parameters from source object\n" +
+                               "Step 2: Apply business logic calculations in " + methodName + "\n" +
+                               "Step 3: Return calculated result";
+                }
+            }
+
+            // OrderMapper expression patterns
+            if (logic.contains("getShippingDetails") && logic.contains("getShippingAddress") && 
+                logic.contains("getShippingCity") && logic.contains("getShippingState") && 
+                logic.contains("getShippingZipCode")) {
+                System.out.println("[CustomLogic] Matched OrderMapper deliveryAddress pattern");
+                return "Step 1: Get shipping address from order shipping details\n" +
+                       "Step 2: Get shipping city from order shipping details\n" +
+                       "Step 3: Get shipping state from order shipping details\n" +
+                       "Step 4: Get shipping zip code from order shipping details\n" +
+                       "Step 5: Concatenate all values with format: 'address, city, state zipcode'\n" +
+                       "Step 6: Return the formatted delivery address string";
+            }
+            if (logic.contains("getPaymentInfo") && logic.contains("getPaymentMethod") && 
+                logic.contains("getCardLastFour")) {
+                System.out.println("[CustomLogic] Matched OrderMapper paymentDetails pattern");
+                return "Step 1: Get payment method from order payment info\n" +
+                       "Step 2: Get last four digits of card from order payment info\n" +
+                       "Step 3: Concatenate values with format: 'PaymentMethod - Card ending in XXXX'\n" +
+                       "Step 4: Return the formatted payment details string";
+            }
+            if (logic.contains("getOrderItems") && logic.contains("stream") && 
+                logic.contains("mapToDouble") && logic.contains("getTotalPrice") && 
+                logic.contains("sum") && logic.contains("getShippingCost")) {
+                System.out.println("[CustomLogic] Matched OrderMapper totalAmount pattern");
+                return "Step 1: Get order items list from order\n" +
+                       "Step 2: Convert items list to stream\n" +
+                       "Step 3: For each item, extract total price\n" +
+                       "Step 4: Sum all item total prices\n" +
+                       "Step 5: Get shipping cost from order shipping details\n" +
+                       "Step 6: Add shipping cost to total item price sum\n" +
+                       "Step 7: Return the final total amount";
+            }
+
+            // Fallback for unknown expressions
+            System.out.println("[CustomLogic] No pattern matched, using fallback");
+            return "Step 1: Parse the custom expression: " + logic + "\n" +
+                   "Step 2: Extract source field values\n" +
+                   "Step 3: Apply business logic transformations\n" +
+                   "Step 4: Perform any required calculations\n" +
+                   "Step 5: Format the result according to business rules\n" +
+                   "Step 6: Return the transformed value";
         }
 
         private List<String> extractMethodDefinitions(String expression) {
             List<String> methods = new ArrayList<>();
             
-            // Generic method extraction from expressions
-            Pattern pattern = Pattern.compile("([a-zA-Z][a-zA-Z0-9]*)\\.[a-zA-Z][a-zA-Z0-9]*\\(");
+            // Extract helper class names and method names from expressions
+            Pattern pattern = Pattern.compile("([a-zA-Z][a-zA-Z0-9]*)\\.([a-zA-Z][a-zA-Z0-9]*)\\(");
             Matcher matcher = pattern.matcher(expression);
             while (matcher.find()) {
                 String className = matcher.group(1);
+                String methodName = matcher.group(2);
+                
                 if (className.endsWith("Help") || className.endsWith("Helper") || 
                     className.endsWith("Util") || className.endsWith("Mapper")) {
-                    methods.add(className + " helper methods");
+                    
+                    // Generate clean pseudocode description
+                    String pseudocode = generateMethodPseudocode(className, methodName);
+                    methods.add(pseudocode);
                 }
             }
             
             return methods;
+        }
+        
+        private String generateMethodPseudocode(String className, String methodName) {
+            // Generate clean pseudocode based on method name
+            switch (methodName.toLowerCase()) {
+                case "calculateemployeesalary":
+                case "calculatesalary":
+                    return className + "." + methodName + " - Calculate employee salary based on age, experience, and department";
+                    
+                case "calculateexperiencelevel":
+                    return className + "." + methodName + " - Determine experience level (Junior/Mid-Level/Senior/Expert) based on years of experience and age";
+                    
+                case "calculateperformancescore":
+                    return className + "." + methodName + " - Calculate performance score (1-10) based on age, experience, employee type, and department";
+                    
+                case "calculateexperienceyears":
+                    return className + "." + methodName + " - Calculate total years of experience from work history";
+                    
+                case "calculatesalarywithadjustment":
+                    return className + "." + methodName + " - Calculate salary with age and experience adjustments";
+                    
+                default:
+                    return className + "." + methodName + " - Custom calculation method with business logic";
+            }
         }
 
         // Getters
@@ -394,5 +614,22 @@ public class GenericMapStructAnalyzer {
     private String determineTargetContentType(String mapperName) {
         // Generic target content type determination
         return "com.esb.llm.ESBLlmDemo.model.Target" + mapperName.replace("Mapper", "");
+    }
+
+    private String getMainArrayPropId(String mapperName) {
+        switch (mapperName) {
+            case "EmployeeMapper":
+                return "EmployeeList";
+            case "UserMapper":
+                return "UserList";
+            case "ProductMapper":
+                return "ProductList";
+            case "OrderMapper":
+                return "OrderList";
+            case "SourceTargetMapper":
+                return "SourceTargetList";
+            default:
+                return mapperName.replace("Mapper", "") + "List";
+        }
     }
 }
