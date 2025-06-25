@@ -1,8 +1,11 @@
 package com.esb.llm.ESBLlmDemo.controller;
 
 import com.esb.llm.ESBLlmDemo.service.EnhancedMapStructJsonRuleGeneratorService;
+import com.esb.llm.ESBLlmDemo.service.GenericMapStructAnalyzer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +19,12 @@ public class EnhancedJsonRuleGeneratorController {
 
     @Autowired
     private EnhancedMapStructJsonRuleGeneratorService enhancedJsonRuleGeneratorService;
+
+    @Autowired
+    private GenericMapStructAnalyzer genericMapStructAnalyzer;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
 
     /**
      * Generate JSON rules for a specific mapper using enhanced reflection
@@ -220,6 +229,39 @@ public class EnhancedJsonRuleGeneratorController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body("Error generating Groq prompt: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Test the generic MapStruct analyzer with any mapper
+     */
+    @GetMapping("/generic-analyzer/{mapperName}")
+    public ResponseEntity<String> analyzeMapperGeneric(@PathVariable String mapperName) {
+        try {
+            String jsonRules = genericMapStructAnalyzer.generateJsonRules(mapperName);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(jsonRules);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error analyzing mapper " + mapperName + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get detailed analysis of any mapper using the generic analyzer
+     */
+    @GetMapping("/generic-analysis/{mapperName}")
+    public ResponseEntity<String> getDetailedAnalysis(@PathVariable String mapperName) {
+        try {
+            Map<String, Object> analysis = genericMapStructAnalyzer.analyzeMapper(mapperName);
+            String jsonAnalysis = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(analysis);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(jsonAnalysis);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error analyzing mapper " + mapperName + ": " + e.getMessage());
         }
     }
 } 

@@ -545,31 +545,79 @@ public class EnhancedMapStructJsonRuleGeneratorService {
         
         @Override
         public void visit(MethodDeclaration md, Void arg) {
-            // Check for @Mapping annotations on the method
+            // Check for @Mapping and @Mappings annotations on the method
             for (AnnotationExpr annotation : md.getAnnotations()) {
                 if (annotation.getNameAsString().equals("Mapping")) {
-                    String source = "";
-                    String target = "";
-                    
-                    // Handle @Mapping annotation with multiple members
+                    extractMappingFromAnnotation(annotation);
+                } else if (annotation.getNameAsString().equals("Mappings")) {
+                    // Handle @Mappings annotation which contains multiple @Mapping annotations
                     if (annotation.isNormalAnnotationExpr()) {
                         var normalAnnotation = annotation.asNormalAnnotationExpr();
                         for (var pair : normalAnnotation.getPairs()) {
-                            if (pair.getNameAsString().equals("source")) {
-                                source = pair.getValue().asStringLiteralExpr().getValue();
-                            } else if (pair.getNameAsString().equals("target")) {
-                                target = pair.getValue().asStringLiteralExpr().getValue();
+                            if (pair.getNameAsString().equals("value")) {
+                                // The value contains an array of @Mapping annotations
+                                if (pair.getValue().isArrayInitializerExpr()) {
+                                    var arrayExpr = pair.getValue().asArrayInitializerExpr();
+                                    for (var element : arrayExpr.getValues()) {
+                                        if (element.isAnnotationExpr()) {
+                                            extractMappingFromAnnotation(element.asAnnotationExpr());
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                    
-                    if (!source.isEmpty() && !target.isEmpty()) {
-                        mappingPairs.add(source + " -> " + target);
+                    } else if (annotation.isSingleMemberAnnotationExpr()) {
+                        // Handle single member annotation where the value is the array
+                        var singleMember = annotation.asSingleMemberAnnotationExpr();
+                        if (singleMember.getMemberValue().isArrayInitializerExpr()) {
+                            var arrayExpr = singleMember.getMemberValue().asArrayInitializerExpr();
+                            for (var element : arrayExpr.getValues()) {
+                                if (element.isAnnotationExpr()) {
+                                    extractMappingFromAnnotation(element.asAnnotationExpr());
+                                }
+                            }
+                        }
                     }
                 }
             }
             
             super.visit(md, arg);
+        }
+        
+        private void extractMappingFromAnnotation(AnnotationExpr annotation) {
+            String source = "";
+            String target = "";
+            String expression = "";
+            
+            // Handle @Mapping annotation with multiple members
+            if (annotation.isNormalAnnotationExpr()) {
+                var normalAnnotation = annotation.asNormalAnnotationExpr();
+                for (var pair : normalAnnotation.getPairs()) {
+                    if (pair.getNameAsString().equals("source")) {
+                        if (pair.getValue().isStringLiteralExpr()) {
+                            source = pair.getValue().asStringLiteralExpr().getValue();
+                        }
+                    } else if (pair.getNameAsString().equals("target")) {
+                        if (pair.getValue().isStringLiteralExpr()) {
+                            target = pair.getValue().asStringLiteralExpr().getValue();
+                        }
+                    } else if (pair.getNameAsString().equals("expression")) {
+                        if (pair.getValue().isStringLiteralExpr()) {
+                            expression = pair.getValue().asStringLiteralExpr().getValue();
+                        }
+                    }
+                }
+            }
+            
+            if (!target.isEmpty()) {
+                if (!source.isEmpty() && !expression.isEmpty()) {
+                    // This is an expression-based mapping
+                    mappingPairs.add("EXPRESSION -> " + target);
+                } else if (!source.isEmpty()) {
+                    // This is a direct field mapping
+                    mappingPairs.add(source + " -> " + target);
+                }
+            }
         }
         
         public List<String> getMappingPairs() {
@@ -1059,56 +1107,38 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             // Store method definition
             methodDefinitions.put(methodName, methodBody);
             
-            // Check for @Mapping annotations with expressions
+            // Check for @Mapping and @Mappings annotations with expressions
             for (AnnotationExpr annotation : md.getAnnotations()) {
                 if (annotation.getNameAsString().equals("Mapping")) {
-                    String source = "";
-                    String target = "";
-                    String expression = "";
-                    
-                    // Handle @Mapping annotation with multiple members
+                    extractCustomMappingFromAnnotation(annotation, md);
+                } else if (annotation.getNameAsString().equals("Mappings")) {
+                    // Handle @Mappings annotation which contains multiple @Mapping annotations
                     if (annotation.isNormalAnnotationExpr()) {
                         var normalAnnotation = annotation.asNormalAnnotationExpr();
                         for (var pair : normalAnnotation.getPairs()) {
-                            if (pair.getNameAsString().equals("source")) {
-                                source = pair.getValue().asStringLiteralExpr().getValue();
-                            } else if (pair.getNameAsString().equals("target")) {
-                                target = pair.getValue().asStringLiteralExpr().getValue();
-                            } else if (pair.getNameAsString().equals("expression")) {
-                                expression = pair.getValue().asStringLiteralExpr().getValue();
+                            if (pair.getNameAsString().equals("value")) {
+                                // The value contains an array of @Mapping annotations
+                                if (pair.getValue().isArrayInitializerExpr()) {
+                                    var arrayExpr = pair.getValue().asArrayInitializerExpr();
+                                    for (var element : arrayExpr.getValues()) {
+                                        if (element.isAnnotationExpr()) {
+                                            extractCustomMappingFromAnnotation(element.asAnnotationExpr(), md);
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                    
-                    // If this is a custom mapping with expression
-                    if (!target.isEmpty() && !expression.isEmpty() && expression.contains("java(")) {
-                        String referencedMethod = extractMethodFromExpression(expression);
-                        if (!referencedMethod.isEmpty()) {
-                            methodsReferencedInExpressions.add(referencedMethod);
-                        }
-                        
-                        CustomMappingInfo mapping = new CustomMappingInfo();
-                        mapping.setMappingName(md.getNameAsString());
-                        mapping.setSourceField(source.isEmpty() ? "EXPRESSION" : source);
-                        mapping.setTargetField(target);
-                        mapping.setMainMethod(referencedMethod);
-                        mapping.setExpression(expression);
-                        
-                        // Find method chain
-                        List<String> methodChain = findMethodChain(referencedMethod, methodDefinitions);
-                        mapping.setMethodChain(methodChain);
-                        
-                        // Get method definitions
-                        List<String> methodDefs = new ArrayList<>();
-                        for (String method : methodChain) {
-                            if (methodDefinitions.containsKey(method)) {
-                                methodDefs.add(method + ": " + methodDefinitions.get(method));
+                    } else if (annotation.isSingleMemberAnnotationExpr()) {
+                        // Handle single member annotation where the value is the array
+                        var singleMember = annotation.asSingleMemberAnnotationExpr();
+                        if (singleMember.getMemberValue().isArrayInitializerExpr()) {
+                            var arrayExpr = singleMember.getMemberValue().asArrayInitializerExpr();
+                            for (var element : arrayExpr.getValues()) {
+                                if (element.isAnnotationExpr()) {
+                                    extractCustomMappingFromAnnotation(element.asAnnotationExpr(), md);
+                                }
                             }
                         }
-                        
-                        mapping.setMethodDefinitions(methodDefs);
-                        
-                        customMappings.add(mapping);
                     }
                 }
             }
@@ -1152,6 +1182,63 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             super.visit(md, arg);
         }
         
+        private void extractCustomMappingFromAnnotation(AnnotationExpr annotation, MethodDeclaration md) {
+            String source = "";
+            String target = "";
+            String expression = "";
+            
+            // Handle @Mapping annotation with multiple members
+            if (annotation.isNormalAnnotationExpr()) {
+                var normalAnnotation = annotation.asNormalAnnotationExpr();
+                for (var pair : normalAnnotation.getPairs()) {
+                    if (pair.getNameAsString().equals("source")) {
+                        if (pair.getValue().isStringLiteralExpr()) {
+                            source = pair.getValue().asStringLiteralExpr().getValue();
+                        }
+                    } else if (pair.getNameAsString().equals("target")) {
+                        if (pair.getValue().isStringLiteralExpr()) {
+                            target = pair.getValue().asStringLiteralExpr().getValue();
+                        }
+                    } else if (pair.getNameAsString().equals("expression")) {
+                        if (pair.getValue().isStringLiteralExpr()) {
+                            expression = pair.getValue().asStringLiteralExpr().getValue();
+                        }
+                    }
+                }
+            }
+            
+            // If this is a custom mapping with expression
+            if (!target.isEmpty() && !expression.isEmpty() && expression.contains("java(")) {
+                String referencedMethod = extractMethodFromExpression(expression);
+                if (!referencedMethod.isEmpty()) {
+                    methodsReferencedInExpressions.add(referencedMethod);
+                }
+                
+                CustomMappingInfo mapping = new CustomMappingInfo();
+                mapping.setMappingName(md.getNameAsString());
+                mapping.setSourceField(source.isEmpty() ? "EXPRESSION" : source);
+                mapping.setTargetField(target);
+                mapping.setMainMethod(referencedMethod);
+                mapping.setExpression(expression);
+                
+                // Find method chain
+                List<String> methodChain = findMethodChain(referencedMethod, methodDefinitions);
+                mapping.setMethodChain(methodChain);
+                
+                // Get method definitions
+                List<String> methodDefs = new ArrayList<>();
+                for (String method : methodChain) {
+                    if (methodDefinitions.containsKey(method)) {
+                        methodDefs.add(method + ": " + methodDefinitions.get(method));
+                    }
+                }
+                
+                mapping.setMethodDefinitions(methodDefs);
+                
+                customMappings.add(mapping);
+            }
+        }
+        
         @Override
         public void visit(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration cd, Void arg) {
             // Check for @Mapper annotation to find helper classes
@@ -1165,6 +1252,9 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
                                 String usesValue = pair.getValue().toString();
                                 if (usesValue.contains("UserMapperHelp")) {
                                     helperClasses.add("UserMapperHelp");
+                                }
+                                if (usesValue.contains("EmployeeMapperHelp")) {
+                                    helperClasses.add("EmployeeMapperHelp");
                                 }
                             }
                         }
@@ -1512,6 +1602,10 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
      */
     public String generateCombinedJsonRules(String mapperName) {
         try {
+            // Determine source and target types based on mapper name
+            String sourceContentType = determineSourceContentType(mapperName);
+            String targetContentType = determineTargetContentType(mapperName);
+            
             // Direct mappings
             String directMappingsRaw = extractFieldMappings(mapperName);
             List<Map<String, Object>> conversionRules = new ArrayList<>();
@@ -1564,6 +1658,9 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
                     if (mapping.getExpression().contains("UserMapperHelp")) {
                         List<String> helperMethods = extractHelperClassMethods("UserMapperHelp");
                         allMethodDefs.addAll(helperMethods);
+                    } else if (mapping.getExpression().contains("EmployeeMapperHelp")) {
+                        List<String> helperMethods = extractHelperClassMethods("EmployeeMapperHelp");
+                        allMethodDefs.addAll(helperMethods);
                     }
                     
                     if (!allMethodDefs.isEmpty()) {
@@ -1576,13 +1673,53 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
 
             // Create the final structure
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("sourceContentType", "com.esb.llm.ESBLlmDemo.model.SourceDto");
-            result.put("targetContentType", "com.esb.llm.ESBLlmDemo.model.TargetDto");
+            result.put("sourceContentType", sourceContentType);
+            result.put("targetContentType", targetContentType);
             result.put("conversionRules", conversionRules);
             
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
         } catch (Exception e) {
             throw new RuntimeException("Error generating combined JSON rules: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Determine source content type based on mapper name
+     */
+    private String determineSourceContentType(String mapperName) {
+        switch (mapperName) {
+            case "SourceTargetMapper":
+                return "com.esb.llm.ESBLlmDemo.model.SourceDto";
+            case "EmployeeMapper":
+                return "com.esb.llm.ESBLlmDemo.model.Employee";
+            case "UserMapper":
+                return "com.esb.llm.ESBLlmDemo.model.User";
+            case "ProductMapper":
+                return "com.esb.llm.ESBLlmDemo.model.Product";
+            case "OrderMapper":
+                return "com.esb.llm.ESBLlmDemo.model.Order";
+            default:
+                return "com.esb.llm.ESBLlmDemo.model.SourceDto";
+        }
+    }
+
+    /**
+     * Determine target content type based on mapper name
+     */
+    private String determineTargetContentType(String mapperName) {
+        switch (mapperName) {
+            case "SourceTargetMapper":
+                return "com.esb.llm.ESBLlmDemo.model.TargetDto";
+            case "EmployeeMapper":
+                return "com.esb.llm.ESBLlmDemo.model.TargetEmployee";
+            case "UserMapper":
+                return "com.esb.llm.ESBLlmDemo.model.TargetUser";
+            case "ProductMapper":
+                return "com.esb.llm.ESBLlmDemo.model.TargetProduct";
+            case "OrderMapper":
+                return "com.esb.llm.ESBLlmDemo.model.TargetOrder";
+            default:
+                return "com.esb.llm.ESBLlmDemo.model.TargetDto";
         }
     }
 
@@ -1632,6 +1769,38 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             logic.append("3. Calculate experience bonus (5% per year, capped at 50%)\n");
             logic.append("4. Calculate ID factor (10% more if user ID ends with odd digit)\n");
             logic.append("5. Calculate bonus = base_salary * (perf_mult + exp_bonus) * id_factor\n");
+        } else if (expression.contains("calculateEmployeeSalary")) {
+            logic.append("1. Get base salary (50,000)\n");
+            logic.append("2. Calculate age-based multiplier:\n");
+            logic.append("   - Young professionals (25-35): 1.1x\n");
+            logic.append("   - Mid-career (35-45): 1.2x\n");
+            logic.append("   - Senior (45+): 1.3x\n");
+            logic.append("3. Calculate experience multiplier (5% per year, capped at 50%)\n");
+            logic.append("4. Apply department multiplier:\n");
+            logic.append("   - Engineering: 1.15x\n");
+            logic.append("   - Marketing: 1.1x\n");
+            logic.append("   - Sales: 1.2x\n");
+            logic.append("5. Return final salary = base * age_mult * exp_mult * dept_mult\n");
+        } else if (expression.contains("calculateExperienceLevel")) {
+            logic.append("1. Calculate total years of experience from work history\n");
+            logic.append("2. Determine experience level based on years and age:\n");
+            logic.append("   - < 2 years: Junior\n");
+            logic.append("   - 2-5 years: Mid-Level\n");
+            logic.append("   - 5-10 years: Senior\n");
+            logic.append("   - 10+ years and age >= 35: Expert\n");
+            logic.append("   - Otherwise: Senior\n");
+            logic.append("3. Return calculated experience level\n");
+        } else if (expression.contains("calculatePerformanceScore")) {
+            logic.append("1. Start with base score (5.0)\n");
+            logic.append("2. Add age-based scoring:\n");
+            logic.append("   - Prime working age (25-40): +1.0\n");
+            logic.append("   - Experienced but older (40+): +0.5\n");
+            logic.append("3. Add experience-based scoring:\n");
+            logic.append("   - Optimal range (3-8 years): +1.5\n");
+            logic.append("   - Very experienced (8+ years): +1.0\n");
+            logic.append("4. Add employee type bonus (Full-Time: +0.5)\n");
+            logic.append("5. Add department bonus (Engineering: +0.3, Sales: +0.2)\n");
+            logic.append("6. Cap final score at 10.0\n");
         } else {
             logic.append("1. Execute custom expression: ").append(expression).append("\n");
             logic.append("2. Apply any business rules specific to ").append(targetField).append("\n");

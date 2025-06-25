@@ -18,7 +18,10 @@ public interface EmployeeMapper {
         @Mapping(source = "gender", target = "gender"),
         @Mapping(source = "address.country", target = "emplocation"),
         @Mapping(source = "officeDetails.location", target = "officelocation"),
-        @Mapping(source = "workExperience", target = "workExperience")
+        @Mapping(source = "workExperience", target = "workExperience"),
+        @Mapping(expression = "java(EmployeeMapperHelp.calculateEmployeeSalary(employee))", target = "salary"),
+        @Mapping(expression = "java(EmployeeMapperHelp.calculateExperienceLevel(employee))", target = "experienceLevel"),
+        @Mapping(expression = "java(EmployeeMapperHelp.calculatePerformanceScore(employee))", target = "performanceScore")
     })
     TargetEmployee employeeToTargetEmployee(Employee employee);
 
