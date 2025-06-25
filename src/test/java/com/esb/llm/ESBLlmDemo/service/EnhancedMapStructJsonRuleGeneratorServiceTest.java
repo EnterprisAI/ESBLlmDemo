@@ -161,4 +161,43 @@ public class EnhancedMapStructJsonRuleGeneratorServiceTest {
         assertFalse(result.contains("doj -> doj"), "Should NOT contain doj -> doj");
         System.out.println("=== Test Complete ===\n");
     }
+
+    @Test
+    public void testExtractCustomMappingsForSourceTargetMapper() throws Exception {
+        System.out.println("=== Testing extractCustomMappings for SourceTargetMapper ===");
+        String result = enhancedJsonRuleGeneratorService.extractCustomMappings("SourceTargetMapper");
+        System.out.println(result);
+        
+        // Assert that the custom mapping is found
+        assertTrue(result.contains("CUSTOM MAPPINGS"), "Should contain custom mappings section");
+        assertTrue(result.contains("calculateSalaryWithAdjustment"), "Should contain the custom method");
+        assertTrue(result.contains("UserMapperHelp"), "Should contain helper class reference");
+        System.out.println("=== Test Complete ===\n");
+    }
+
+    @Test
+    public void testExtractEnhancedCustomMappingsForSourceTargetMapper() throws Exception {
+        System.out.println("=== Testing extractCustomMappingsEnhanced for SourceTargetMapper ===");
+        String result = enhancedJsonRuleGeneratorService.extractCustomMappingsEnhanced("SourceTargetMapper");
+        System.out.println(result);
+        
+        // Assert that the enhanced custom mapping is found
+        assertTrue(result.contains("ENHANCED CUSTOM MAPPINGS"), "Should contain enhanced custom mappings section");
+        assertTrue(result.contains("calculateSalaryWithAdjustment"), "Should contain the custom method");
+        assertTrue(result.contains("UserMapperHelp"), "Should contain helper class reference");
+        System.out.println("=== Test Complete ===\n");
+    }
+
+    @Test
+    public void testCreateComprehensivePromptForSourceTargetMapper() throws Exception {
+        System.out.println("=== Testing createComprehensivePrompt for SourceTargetMapper ===");
+        String result = enhancedJsonRuleGeneratorService.createComprehensivePrompt("SourceTargetMapper");
+        System.out.println(result);
+        
+        // Assert that the comprehensive prompt contains both direct and custom mappings
+        assertTrue(result.contains("DIRECT MAPPINGS"), "Should contain direct mappings section");
+        assertTrue(result.contains("CUSTOM MAPPINGS"), "Should contain custom mappings section");
+        assertTrue(result.contains("calculateSalaryWithAdjustment"), "Should contain custom method reference");
+        System.out.println("=== Test Complete ===\n");
+    }
 } 

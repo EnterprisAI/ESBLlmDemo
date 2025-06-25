@@ -651,7 +651,7 @@ public class EnhancedMapStructJsonRuleGeneratorService {
     /**
      * Call Groq API
      */
-    private String callGroq(String prompt) {
+    public String callGroq(String prompt) {
         try {
             // Create headers with API key
             HttpHeaders headers = new HttpHeaders();
@@ -884,6 +884,772 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             return generateJsonRulesWithOllama(mapperName);
         } catch (Exception e) {
             throw new RuntimeException("Error reading mapper source or generating rules: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Extract custom mappings and their linked methods from mapper interfaces
+     * This method identifies custom mapping methods and traces their method chains
+     */
+    public String extractCustomMappings(String mapperName) {
+        try {
+            System.out.println("=== EXTRACTING CUSTOM MAPPINGS FOR: " + mapperName + " ===");
+            
+            // Find the source file for the mapper
+            String sourceFilePath = findMapperSourceFile(mapperName);
+            System.out.println("Source file path: " + sourceFilePath);
+            
+            if (sourceFilePath == null) {
+                System.out.println("Could not find source file for mapper: " + mapperName);
+                return "NO CUSTOM MAPPINGS FOUND\nCould not locate source file for mapper: " + mapperName;
+            }
+            
+            // Parse the source file
+            System.out.println("Parsing source file with JavaParser...");
+            CompilationUnit cu = StaticJavaParser.parse(new File(sourceFilePath));
+            System.out.println("Successfully parsed source file");
+            
+            // Extract custom mappings from the parsed code
+            CustomMappingExtractor extractor = new CustomMappingExtractor();
+            extractor.visit(cu, null);
+            
+            List<CustomMappingInfo> customMappings = extractor.getCustomMappings();
+            System.out.println("Found " + customMappings.size() + " custom mappings");
+            
+            // Find helper classes and extract their methods
+            List<String> helperClasses = extractor.getHelperClasses();
+            Map<String, List<String>> helperMethods = new HashMap<>();
+            
+            for (String helperClass : helperClasses) {
+                List<String> methods = extractHelperClassMethods(helperClass);
+                helperMethods.put(helperClass, methods);
+            }
+            
+            if (customMappings.isEmpty()) {
+                System.out.println("=== EXTRACTED CUSTOM MAPPINGS RESULT ===");
+                System.out.println("NO CUSTOM MAPPINGS FOUND");
+                System.out.println("No custom mapping methods found in the mapper.");
+                System.out.println("=== END EXTRACTED CUSTOM MAPPINGS ===");
+                return "NO CUSTOM MAPPINGS FOUND\nNo custom mapping methods found in the mapper.";
+            }
+            
+            StringBuilder result = new StringBuilder();
+            result.append("CUSTOM MAPPINGS (with linked methods):\n");
+            result.append("=====================================\n\n");
+            
+            for (CustomMappingInfo mapping : customMappings) {
+                result.append("CUSTOM MAPPING: ").append(mapping.getMappingName()).append("\n");
+                result.append("Target Field: ").append(mapping.getTargetField()).append("\n");
+                result.append("Main Method: ").append(mapping.getMainMethod()).append("\n");
+                result.append("Method Chain:\n");
+                
+                for (String method : mapping.getMethodChain()) {
+                    result.append("  -> ").append(method).append("\n");
+                }
+                
+                result.append("Method Definitions:\n");
+                for (String methodDef : mapping.getMethodDefinitions()) {
+                    result.append("  ").append(methodDef).append("\n");
+                }
+                result.append("\n");
+            }
+            
+            // Add helper class information
+            if (!helperMethods.isEmpty()) {
+                result.append("HELPER CLASSES AND METHODS:\n");
+                result.append("===========================\n\n");
+                
+                for (Map.Entry<String, List<String>> entry : helperMethods.entrySet()) {
+                    result.append("Helper Class: ").append(entry.getKey()).append("\n");
+                    result.append("Methods:\n");
+                    for (String method : entry.getValue()) {
+                        result.append("  ").append(method).append("\n");
+                    }
+                    result.append("\n");
+                }
+            }
+            
+            System.out.println("=== EXTRACTED CUSTOM MAPPINGS RESULT ===");
+            System.out.println(result.toString());
+            System.out.println("=== END EXTRACTED CUSTOM MAPPINGS ===");
+            
+            return result.toString();
+            
+        } catch (Exception e) {
+            System.err.println("Error extracting custom mappings: " + e.getMessage());
+            e.printStackTrace();
+            return "ERROR: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Extract methods from a helper class
+     */
+    private List<String> extractHelperClassMethods(String helperClassName) {
+        List<String> methods = new ArrayList<>();
+        try {
+            String helperFilePath = findHelperClassSourceFile(helperClassName);
+            if (helperFilePath != null) {
+                CompilationUnit cu = StaticJavaParser.parse(new File(helperFilePath));
+                HelperMethodExtractor extractor = new HelperMethodExtractor();
+                extractor.visit(cu, null);
+                methods = extractor.getMethods();
+            }
+        } catch (Exception e) {
+            System.err.println("Error extracting methods from helper class " + helperClassName + ": " + e.getMessage());
+        }
+        return methods;
+    }
+
+    /**
+     * Find the source file for a helper class
+     */
+    private String findHelperClassSourceFile(String helperClassName) {
+        String[] possiblePaths = {
+            "src/main/java/com/esb/llm/ESBLlmDemo/mapper/" + helperClassName + ".java",
+            "src/main/java/com/esb/llm/ESBLlmDemo/service/" + helperClassName + ".java",
+            "src/main/java/com/esb/llm/ESBLlmDemo/util/" + helperClassName + ".java"
+        };
+        
+        for (String path : possiblePaths) {
+            File file = new File(path);
+            if (file.exists()) {
+                return file.getAbsolutePath();
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * JavaParser visitor to extract methods from helper classes
+     */
+    private static class HelperMethodExtractor extends VoidVisitorAdapter<Void> {
+        private List<String> methods = new ArrayList<>();
+        
+        @Override
+        public void visit(MethodDeclaration md, Void arg) {
+            String methodName = md.getNameAsString();
+            String methodBody = md.getBody().map(body -> body.toString()).orElse("");
+            methods.add(methodName + ": " + methodBody);
+            super.visit(md, arg);
+        }
+        
+        public List<String> getMethods() {
+            return methods;
+        }
+    }
+
+    /**
+     * JavaParser visitor to extract custom mappings and their method chains
+     */
+    private static class CustomMappingExtractor extends VoidVisitorAdapter<Void> {
+        private List<CustomMappingInfo> customMappings = new ArrayList<>();
+        private Map<String, String> methodDefinitions = new HashMap<>();
+        private List<String> helperClasses = new ArrayList<>();
+        private Set<String> methodsReferencedInExpressions = new HashSet<>();
+        
+        @Override
+        public void visit(MethodDeclaration md, Void arg) {
+            String methodName = md.getNameAsString();
+            String methodBody = md.getBody().map(body -> body.toString()).orElse("");
+            
+            // Store method definition
+            methodDefinitions.put(methodName, methodBody);
+            
+            // Check for @Mapping annotations with expressions
+            for (AnnotationExpr annotation : md.getAnnotations()) {
+                if (annotation.getNameAsString().equals("Mapping")) {
+                    String target = "";
+                    String expression = "";
+                    
+                    // Handle @Mapping annotation with multiple members
+                    if (annotation.isNormalAnnotationExpr()) {
+                        var normalAnnotation = annotation.asNormalAnnotationExpr();
+                        for (var pair : normalAnnotation.getPairs()) {
+                            if (pair.getNameAsString().equals("target")) {
+                                target = pair.getValue().asStringLiteralExpr().getValue();
+                            } else if (pair.getNameAsString().equals("expression")) {
+                                expression = pair.getValue().asStringLiteralExpr().getValue();
+                            }
+                        }
+                    }
+                    
+                    // If this is a custom mapping with expression
+                    if (!target.isEmpty() && !expression.isEmpty() && expression.contains("java(")) {
+                        String referencedMethod = extractMethodFromExpression(expression);
+                        if (!referencedMethod.isEmpty()) {
+                            methodsReferencedInExpressions.add(referencedMethod);
+                        }
+                        
+                        CustomMappingInfo mapping = new CustomMappingInfo();
+                        mapping.setMappingName(md.getNameAsString());
+                        mapping.setTargetField(target);
+                        mapping.setMainMethod(referencedMethod);
+                        
+                        // Find method chain
+                        List<String> methodChain = findMethodChain(referencedMethod, methodDefinitions);
+                        mapping.setMethodChain(methodChain);
+                        
+                        // Get method definitions
+                        List<String> methodDefs = new ArrayList<>();
+                        for (String method : methodChain) {
+                            if (methodDefinitions.containsKey(method)) {
+                                methodDefs.add(method + ": " + methodDefinitions.get(method));
+                            }
+                        }
+                        mapping.setMethodDefinitions(methodDefs);
+                        
+                        customMappings.add(mapping);
+                    }
+                }
+            }
+            
+            // Check for helper class usage in method body
+            if (!methodBody.isEmpty()) {
+                List<String> foundHelpers = findHelperClassesInMethod(methodBody);
+                helperClasses.addAll(foundHelpers);
+            }
+            
+            super.visit(md, arg);
+        }
+        
+        @Override
+        public void visit(com.github.javaparser.ast.body.ClassOrInterfaceDeclaration cd, Void arg) {
+            // Check for @Mapper annotation to find helper classes
+            for (AnnotationExpr annotation : cd.getAnnotations()) {
+                if (annotation.getNameAsString().equals("Mapper")) {
+                    if (annotation.isNormalAnnotationExpr()) {
+                        var normalAnnotation = annotation.asNormalAnnotationExpr();
+                        for (var pair : normalAnnotation.getPairs()) {
+                            if (pair.getNameAsString().equals("uses")) {
+                                // Extract helper classes from uses parameter
+                                String usesValue = pair.getValue().toString();
+                                if (usesValue.contains("UserMapperHelp")) {
+                                    helperClasses.add("UserMapperHelp");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            super.visit(cd, arg);
+        }
+        
+        public List<CustomMappingInfo> getCustomMappings() {
+            return customMappings;
+        }
+        
+        public List<String> getHelperClasses() {
+            return helperClasses.stream().distinct().collect(Collectors.toList());
+        }
+        
+        private String extractMethodFromExpression(String expression) {
+            // Extract method name from java() expression
+            if (expression.contains("java(")) {
+                String javaCode = expression.substring(expression.indexOf("java(") + 5, expression.lastIndexOf(")"));
+                // Find method call pattern
+                String[] parts = javaCode.split("\\.");
+                if (parts.length > 0) {
+                    String lastPart = parts[parts.length - 1];
+                    if (lastPart.contains("(")) {
+                        return lastPart.substring(0, lastPart.indexOf("("));
+                    }
+                }
+            }
+            return "";
+        }
+        
+        private List<String> findMethodChain(String startMethod, Map<String, String> methodDefs) {
+            List<String> chain = new ArrayList<>();
+            Set<String> visited = new HashSet<>();
+            
+            findMethodChainRecursive(startMethod, methodDefs, chain, visited);
+            return chain;
+        }
+        
+        private void findMethodChainRecursive(String methodName, Map<String, String> methodDefs, 
+                                            List<String> chain, Set<String> visited) {
+            if (visited.contains(methodName) || !methodDefs.containsKey(methodName)) {
+                return;
+            }
+            
+            visited.add(methodName);
+            chain.add(methodName);
+            
+            String methodBody = methodDefs.get(methodName);
+            
+            // Find method calls in the body
+            String[] lines = methodBody.split("\n");
+            for (String line : lines) {
+                // Look for method calls (simplified pattern matching)
+                if (line.contains("(") && line.contains(")") && !line.contains("if") && !line.contains("for")) {
+                    String[] words = line.split("\\s+");
+                    for (String word : words) {
+                        if (word.contains("(") && word.contains(")") && !word.startsWith("(")) {
+                            String potentialMethod = word.substring(0, word.indexOf("("));
+                            if (methodDefs.containsKey(potentialMethod) && !visited.contains(potentialMethod)) {
+                                findMethodChainRecursive(potentialMethod, methodDefs, chain, visited);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        private List<String> findHelperClassesInMethod(String methodBody) {
+            List<String> helpers = new ArrayList<>();
+            
+            // Look for patterns like "new UserMapperHelp()" or "helper.calculateAdjustedSalary"
+            String[] lines = methodBody.split("\n");
+            for (String line : lines) {
+                // Pattern for "new ClassName()"
+                if (line.contains("new ") && line.contains("()")) {
+                    String[] parts = line.split("new ");
+                    for (String part : parts) {
+                        if (part.contains("()")) {
+                            String className = part.substring(0, part.indexOf("("));
+                            if (className.contains(".")) {
+                                className = className.substring(className.lastIndexOf(".") + 1);
+                            }
+                            if (className.endsWith("Help") || className.endsWith("Helper") || 
+                                className.endsWith("Mapper") || className.endsWith("Util")) {
+                                helpers.add(className);
+                            }
+                        }
+                    }
+                }
+                
+                // Pattern for "helper.methodName" or "className.methodName"
+                if (line.contains(".") && line.contains("(")) {
+                    String[] parts = line.split("\\.");
+                    if (parts.length > 1) {
+                        String potentialHelper = parts[0].trim();
+                        if (potentialHelper.endsWith("Help") || potentialHelper.endsWith("Helper") || 
+                            potentialHelper.endsWith("Mapper") || potentialHelper.endsWith("Util")) {
+                            helpers.add(potentialHelper);
+                        }
+                    }
+                }
+            }
+            
+            return helpers;
+        }
+    }
+    
+    /**
+     * Data class to hold custom mapping information
+     */
+    private static class CustomMappingInfo {
+        private String mappingName;
+        private String targetField;
+        private String mainMethod;
+        private List<String> methodChain;
+        private List<String> methodDefinitions;
+        
+        // Getters and setters
+        public String getMappingName() { return mappingName; }
+        public void setMappingName(String mappingName) { this.mappingName = mappingName; }
+        
+        public String getTargetField() { return targetField; }
+        public void setTargetField(String targetField) { this.targetField = targetField; }
+        
+        public String getMainMethod() { return mainMethod; }
+        public void setMainMethod(String mainMethod) { this.mainMethod = mainMethod; }
+        
+        public List<String> getMethodChain() { return methodChain; }
+        public void setMethodChain(List<String> methodChain) { this.methodChain = methodChain; }
+        
+        public List<String> getMethodDefinitions() { return methodDefinitions; }
+        public void setMethodDefinitions(List<String> methodDefinitions) { this.methodDefinitions = methodDefinitions; }
+    }
+
+    /**
+     * Create a comprehensive prompt that includes both direct mappings and custom mappings
+     */
+    public String createComprehensivePrompt(String mapperName) {
+        try {
+            String directMappings = extractFieldMappings(mapperName);
+            String customMappings = extractCustomMappings(mapperName);
+            
+            StringBuilder prompt = new StringBuilder();
+            prompt.append("You are an expert JSON rule generator for MapStruct mappers. Analyze the following MapStruct mapper and generate comprehensive JSON conversion rules.\n\n");
+            prompt.append("MAPPER: ").append(mapperName).append("\n\n");
+            
+            prompt.append("DIRECT MAPPINGS (from @Mapping annotations):\n");
+            prompt.append("===========================================\n");
+            prompt.append(directMappings).append("\n\n");
+            
+            prompt.append("CUSTOM MAPPINGS (with linked methods):\n");
+            prompt.append("=====================================\n");
+            prompt.append(customMappings).append("\n\n");
+            
+            prompt.append("CRITICAL REQUIREMENTS:\n");
+            prompt.append("1. Extract ONLY @Mapping annotations and their source/target properties\n");
+            prompt.append("2. **MOST IMPORTANT**: Include ONLY properties that have explicit @Mapping annotations:\n");
+            prompt.append("   - ONLY fields with @Mapping(source = \"...\", target = \"...\") annotations\n");
+            prompt.append("   - **DO NOT include fields that exist in source/target but are not explicitly mapped**\n");
+            prompt.append("   - **DO NOT include fields from @AfterMapping methods unless they have explicit @Mapping**\n");
+            prompt.append("   - **DO NOT include fields from helper classes unless they have explicit @Mapping**\n");
+            prompt.append("3. Handle collections (List, Set, arrays) and mark as isArray=true\n");
+            prompt.append("4. **ONLY create mapping rules for explicitly mapped fields**\n");
+            prompt.append("5. **For custom mappings, include the custom logic as method definitions**\n\n");
+            
+            prompt.append("FIELD DETECTION STRATEGY:\n");
+            prompt.append("- Look for fields that are EXPLICITLY mapped with @Mapping annotations ONLY\n");
+            prompt.append("- **IGNORE fields that are referenced in @AfterMapping methods but not explicitly mapped**\n");
+            prompt.append("- **IGNORE fields that are used in helper class calculations but not explicitly mapped**\n");
+            prompt.append("- **ONLY include fields that have explicit @Mapping annotations**\n");
+            prompt.append("- **CREATE SEPARATE MAPPINGS for each explicitly mapped field**\n");
+            prompt.append("- **For custom mappings, include the method chain and definitions**\n\n");
+            
+            prompt.append("Generate a comprehensive JSON structure in this exact format:\n");
+            prompt.append("{\n");
+            prompt.append("  \"sourceContentType\": \"com.esb.llm.ESBLlmDemo.model.SourceClassName\",\n");
+            prompt.append("  \"targetContentType\": \"com.esb.llm.ESBLlmDemo.model.TargetClassName\",\n");
+            prompt.append("  \"conversionRules\": [\n");
+            prompt.append("    {\n");
+            prompt.append("      \"propID\": \"PROPERTY_NAME_MAPPING\",\n");
+            prompt.append("      \"sourceLocation\": \"sourceProperty\",\n");
+            prompt.append("      \"targetLocation\": \"targetProperty\",\n");
+            prompt.append("      \"isArray\": false\n");
+            prompt.append("    }\n");
+            prompt.append("  ],\n");
+            prompt.append("  \"customMappings\": [\n");
+            prompt.append("    {\n");
+            prompt.append("      \"targetField\": \"fieldName\",\n");
+            prompt.append("      \"methodChain\": [\"method1\", \"method2\"],\n");
+            prompt.append("      \"methodDefinitions\": [\"method1: body\", \"method2: body\"]\n");
+            prompt.append("    }\n");
+            prompt.append("  ]\n");
+            prompt.append("}\n\n");
+            
+            prompt.append("IMPORTANT GUIDELINES:\n");
+            prompt.append("- Use actual property names from the @Mapping annotations ONLY\n");
+            prompt.append("- Set isArray=true for List, Set, or array types\n");
+            prompt.append("- **INCLUDE ONLY FIELDS that have explicit @Mapping annotations**\n");
+            prompt.append("- **IGNORE @AfterMapping methods unless fields are explicitly mapped**\n");
+            prompt.append("- **IGNORE helper class transformations unless fields are explicitly mapped**\n");
+            prompt.append("- Be comprehensive but only for explicitly mapped fields\n");
+            prompt.append("- Use descriptive propID names based on the actual mapping purpose\n");
+            prompt.append("- **DO NOT include fields that exist in source/target but are not explicitly mapped**\n");
+            prompt.append("- **CREATE SEPARATE MAPPING RULES for each explicitly mapped field**\n");
+            prompt.append("- Use the actual class names from the mapper interface\n");
+            prompt.append("- **For custom mappings, include the complete method chain and definitions**\n\n");
+            
+            prompt.append("ANALYSIS STEPS:\n");
+            prompt.append("1. Extract all @Mapping annotations and their source/target properties (see direct mappings)\n");
+            prompt.append("2. **IGNORE @AfterMapping methods unless they have explicit @Mapping annotations**\n");
+            prompt.append("3. **IGNORE helper classes unless they have explicit @Mapping annotations**\n");
+            prompt.append("4. Detect collections and nested objects\n");
+            prompt.append("5. Generate separate mapping rules for each EXPLICITLY MAPPED field only\n");
+            prompt.append("6. **Include custom mappings with their method chains and definitions**\n\n");
+            
+            prompt.append("Generate the JSON rules based on the extracted mappings provided above, ensuring ONLY fields with explicit @Mapping annotations are included as separate mappings, and custom mappings are properly documented with their method chains.");
+            
+            return prompt.toString();
+            
+        } catch (Exception e) {
+            System.err.println("Error creating comprehensive prompt: " + e.getMessage());
+            e.printStackTrace();
+            return "ERROR: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Enhanced custom mapping extraction that also finds default methods with custom logic
+     */
+    public String extractCustomMappingsEnhanced(String mapperName) {
+        try {
+            System.out.println("=== EXTRACTING ENHANCED CUSTOM MAPPINGS FOR: " + mapperName + " ===");
+            
+            // Find the source file for the mapper
+            String sourceFilePath = findMapperSourceFile(mapperName);
+            System.out.println("Source file path: " + sourceFilePath);
+            
+            if (sourceFilePath == null) {
+                System.out.println("Could not find source file for mapper: " + mapperName);
+                return "NO CUSTOM MAPPINGS FOUND\nCould not locate source file for mapper: " + mapperName;
+            }
+            
+            // Parse the source file
+            System.out.println("Parsing source file with JavaParser...");
+            CompilationUnit cu = StaticJavaParser.parse(new File(sourceFilePath));
+            System.out.println("Successfully parsed source file");
+            
+            // Extract custom mappings from the parsed code
+            EnhancedCustomMappingExtractor extractor = new EnhancedCustomMappingExtractor();
+            extractor.visit(cu, null);
+            
+            List<CustomMappingInfo> customMappings = extractor.getCustomMappings();
+            System.out.println("Found " + customMappings.size() + " custom mappings");
+            
+            // Find helper classes and extract their methods
+            List<String> helperClasses = extractor.getHelperClasses();
+            Map<String, List<String>> helperMethods = new HashMap<>();
+            
+            for (String helperClass : helperClasses) {
+                List<String> methods = extractHelperClassMethods(helperClass);
+                helperMethods.put(helperClass, methods);
+            }
+            
+            if (customMappings.isEmpty()) {
+                System.out.println("=== EXTRACTED ENHANCED CUSTOM MAPPINGS RESULT ===");
+                System.out.println("NO CUSTOM MAPPINGS FOUND");
+                System.out.println("No custom mapping methods found in the mapper.");
+                System.out.println("=== END EXTRACTED ENHANCED CUSTOM MAPPINGS ===");
+                return "NO CUSTOM MAPPINGS FOUND\nNo custom mapping methods found in the mapper.";
+            }
+            
+            StringBuilder result = new StringBuilder();
+            result.append("ENHANCED CUSTOM MAPPINGS (with linked methods):\n");
+            result.append("==============================================\n\n");
+            
+            for (CustomMappingInfo mapping : customMappings) {
+                result.append("CUSTOM MAPPING: ").append(mapping.getMappingName()).append("\n");
+                result.append("Target Field: ").append(mapping.getTargetField()).append("\n");
+                result.append("Main Method: ").append(mapping.getMainMethod()).append("\n");
+                result.append("Method Chain:\n");
+                
+                for (String method : mapping.getMethodChain()) {
+                    result.append("  -> ").append(method).append("\n");
+                }
+                
+                result.append("Method Definitions:\n");
+                for (String methodDef : mapping.getMethodDefinitions()) {
+                    result.append("  ").append(methodDef).append("\n");
+                }
+                result.append("\n");
+            }
+            
+            // Add helper class information
+            if (!helperMethods.isEmpty()) {
+                result.append("HELPER CLASSES AND METHODS:\n");
+                result.append("===========================\n\n");
+                
+                for (Map.Entry<String, List<String>> entry : helperMethods.entrySet()) {
+                    result.append("Helper Class: ").append(entry.getKey()).append("\n");
+                    result.append("Methods:\n");
+                    for (String method : entry.getValue()) {
+                        result.append("  ").append(method).append("\n");
+                    }
+                    result.append("\n");
+                }
+            }
+            
+            System.out.println("=== EXTRACTED ENHANCED CUSTOM MAPPINGS RESULT ===");
+            System.out.println(result.toString());
+            System.out.println("=== END EXTRACTED ENHANCED CUSTOM MAPPINGS ===");
+            
+            return result.toString();
+            
+        } catch (Exception e) {
+            System.err.println("Error extracting enhanced custom mappings: " + e.getMessage());
+            e.printStackTrace();
+            return "ERROR: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Enhanced JavaParser visitor to extract custom mappings including default methods
+     */
+    private static class EnhancedCustomMappingExtractor extends VoidVisitorAdapter<Void> {
+        private List<CustomMappingInfo> customMappings = new ArrayList<>();
+        private Map<String, String> methodDefinitions = new HashMap<>();
+        private List<String> helperClasses = new ArrayList<>();
+        
+        @Override
+        public void visit(MethodDeclaration md, Void arg) {
+            String methodName = md.getNameAsString();
+            String methodBody = md.getBody().map(body -> body.toString()).orElse("");
+            
+            // Store method definition
+            methodDefinitions.put(methodName, methodBody);
+            
+            // Check for @Mapping annotations with expressions
+            for (AnnotationExpr annotation : md.getAnnotations()) {
+                if (annotation.getNameAsString().equals("Mapping")) {
+                    String target = "";
+                    String expression = "";
+                    
+                    // Handle @Mapping annotation with multiple members
+                    if (annotation.isNormalAnnotationExpr()) {
+                        var normalAnnotation = annotation.asNormalAnnotationExpr();
+                        for (var pair : normalAnnotation.getPairs()) {
+                            if (pair.getNameAsString().equals("target")) {
+                                target = pair.getValue().asStringLiteralExpr().getValue();
+                            } else if (pair.getNameAsString().equals("expression")) {
+                                expression = pair.getValue().asStringLiteralExpr().getValue();
+                            }
+                        }
+                    }
+                    
+                    // If this is a custom mapping with expression
+                    if (!target.isEmpty() && !expression.isEmpty() && expression.contains("java(")) {
+                        CustomMappingInfo mapping = new CustomMappingInfo();
+                        mapping.setMappingName(md.getNameAsString());
+                        mapping.setTargetField(target);
+                        mapping.setMainMethod(extractMethodFromExpression(expression));
+                        
+                        // Find method chain
+                        List<String> methodChain = findMethodChain(mapping.getMainMethod(), methodDefinitions);
+                        mapping.setMethodChain(methodChain);
+                        
+                        // Get method definitions
+                        List<String> methodDefs = new ArrayList<>();
+                        for (String method : methodChain) {
+                            if (methodDefinitions.containsKey(method)) {
+                                methodDefs.add(method + ": " + methodDefinitions.get(method));
+                            }
+                        }
+                        mapping.setMethodDefinitions(methodDefs);
+                        
+                        customMappings.add(mapping);
+                    }
+                }
+            }
+            
+            // Check for default methods with custom logic (not explicitly mapped)
+            if (md.isDefault() && !methodBody.isEmpty() && hasCustomLogic(methodBody)) {
+                // This is a default method with custom logic that might be used in mappings
+                CustomMappingInfo mapping = new CustomMappingInfo();
+                mapping.setMappingName(methodName);
+                mapping.setTargetField("DEFAULT_METHOD");
+                mapping.setMainMethod(methodName);
+                
+                // Find method chain
+                List<String> methodChain = findMethodChain(methodName, methodDefinitions);
+                mapping.setMethodChain(methodChain);
+                
+                // Get method definitions
+                List<String> methodDefs = new ArrayList<>();
+                for (String method : methodChain) {
+                    if (methodDefinitions.containsKey(method)) {
+                        methodDefs.add(method + ": " + methodDefinitions.get(method));
+                    }
+                }
+                mapping.setMethodDefinitions(methodDefs);
+                
+                customMappings.add(mapping);
+            }
+            
+            // Check for helper class usage in method body
+            if (!methodBody.isEmpty()) {
+                List<String> foundHelpers = findHelperClassesInMethod(methodBody);
+                helperClasses.addAll(foundHelpers);
+            }
+            
+            super.visit(md, arg);
+        }
+        
+        public List<CustomMappingInfo> getCustomMappings() {
+            return customMappings;
+        }
+        
+        public List<String> getHelperClasses() {
+            return helperClasses.stream().distinct().collect(Collectors.toList());
+        }
+        
+        private boolean hasCustomLogic(String methodBody) {
+            // Check if method body contains custom logic (not just simple assignments)
+            return methodBody.contains("new ") || 
+                   methodBody.contains("(") && methodBody.contains(")") ||
+                   methodBody.contains("if") || 
+                   methodBody.contains("for") ||
+                   methodBody.contains("return") && methodBody.contains("(");
+        }
+        
+        // ... existing helper methods from CustomMappingExtractor ...
+        private String extractMethodFromExpression(String expression) {
+            // Extract method name from java() expression
+            if (expression.contains("java(")) {
+                String javaCode = expression.substring(expression.indexOf("java(") + 5, expression.lastIndexOf(")"));
+                // Find method call pattern
+                String[] parts = javaCode.split("\\.");
+                if (parts.length > 0) {
+                    String lastPart = parts[parts.length - 1];
+                    if (lastPart.contains("(")) {
+                        return lastPart.substring(0, lastPart.indexOf("("));
+                    }
+                }
+            }
+            return "";
+        }
+        
+        private List<String> findMethodChain(String startMethod, Map<String, String> methodDefs) {
+            List<String> chain = new ArrayList<>();
+            Set<String> visited = new HashSet<>();
+            
+            findMethodChainRecursive(startMethod, methodDefs, chain, visited);
+            return chain;
+        }
+        
+        private void findMethodChainRecursive(String methodName, Map<String, String> methodDefs, 
+                                            List<String> chain, Set<String> visited) {
+            if (visited.contains(methodName) || !methodDefs.containsKey(methodName)) {
+                return;
+            }
+            
+            visited.add(methodName);
+            chain.add(methodName);
+            
+            String methodBody = methodDefs.get(methodName);
+            
+            // Find method calls in the body
+            String[] lines = methodBody.split("\n");
+            for (String line : lines) {
+                // Look for method calls (simplified pattern matching)
+                if (line.contains("(") && line.contains(")") && !line.contains("if") && !line.contains("for")) {
+                    String[] words = line.split("\\s+");
+                    for (String word : words) {
+                        if (word.contains("(") && word.contains(")") && !word.startsWith("(")) {
+                            String potentialMethod = word.substring(0, word.indexOf("("));
+                            if (methodDefs.containsKey(potentialMethod) && !visited.contains(potentialMethod)) {
+                                findMethodChainRecursive(potentialMethod, methodDefs, chain, visited);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        private List<String> findHelperClassesInMethod(String methodBody) {
+            List<String> helpers = new ArrayList<>();
+            
+            // Look for patterns like "new UserMapperHelp()" or "helper.calculateAdjustedSalary"
+            String[] lines = methodBody.split("\n");
+            for (String line : lines) {
+                // Pattern for "new ClassName()"
+                if (line.contains("new ") && line.contains("()")) {
+                    String[] parts = line.split("new ");
+                    for (String part : parts) {
+                        if (part.contains("()")) {
+                            String className = part.substring(0, part.indexOf("("));
+                            if (className.contains(".")) {
+                                className = className.substring(className.lastIndexOf(".") + 1);
+                            }
+                            if (className.endsWith("Help") || className.endsWith("Helper") || 
+                                className.endsWith("Mapper") || className.endsWith("Util")) {
+                                helpers.add(className);
+                            }
+                        }
+                    }
+                }
+                
+                // Pattern for "helper.methodName" or "className.methodName"
+                if (line.contains(".") && line.contains("(")) {
+                    String[] parts = line.split("\\.");
+                    if (parts.length > 1) {
+                        String potentialHelper = parts[0].trim();
+                        if (potentialHelper.endsWith("Help") || potentialHelper.endsWith("Helper") || 
+                            potentialHelper.endsWith("Mapper") || potentialHelper.endsWith("Util")) {
+                            helpers.add(potentialHelper);
+                        }
+                    }
+                }
+            }
+            
+            return helpers;
         }
     }
 } 

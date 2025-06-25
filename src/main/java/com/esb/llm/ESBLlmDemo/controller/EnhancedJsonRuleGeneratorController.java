@@ -2,6 +2,7 @@ package com.esb.llm.ESBLlmDemo.controller;
 
 import com.esb.llm.ESBLlmDemo.service.EnhancedMapStructJsonRuleGeneratorService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -134,6 +135,63 @@ public class EnhancedJsonRuleGeneratorController {
             return ResponseEntity.ok(rules);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Extract custom mappings and their linked methods from a mapper
+     */
+    @GetMapping("/custom-mappings/{mapperName}")
+    public ResponseEntity<String> extractCustomMappings(@PathVariable String mapperName) {
+        try {
+            String customMappings = enhancedJsonRuleGeneratorService.extractCustomMappings(mapperName);
+            return ResponseEntity.ok(customMappings);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error extracting custom mappings: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Extract enhanced custom mappings including default methods
+     */
+    @GetMapping("/enhanced-custom-mappings/{mapperName}")
+    public ResponseEntity<String> extractEnhancedCustomMappings(@PathVariable String mapperName) {
+        try {
+            String customMappings = enhancedJsonRuleGeneratorService.extractCustomMappingsEnhanced(mapperName);
+            return ResponseEntity.ok(customMappings);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error extracting enhanced custom mappings: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Create comprehensive prompt with both direct and custom mappings
+     */
+    @GetMapping("/comprehensive-prompt/{mapperName}")
+    public ResponseEntity<String> createComprehensivePrompt(@PathVariable String mapperName) {
+        try {
+            String prompt = enhancedJsonRuleGeneratorService.createComprehensivePrompt(mapperName);
+            return ResponseEntity.ok(prompt);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error creating comprehensive prompt: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generate JSON rules with comprehensive prompt including custom mappings
+     */
+    @PostMapping("/generate-with-custom-mappings/{mapperName}")
+    public ResponseEntity<String> generateJsonRulesWithCustomMappings(@PathVariable String mapperName) {
+        try {
+            String prompt = enhancedJsonRuleGeneratorService.createComprehensivePrompt(mapperName);
+            String response = enhancedJsonRuleGeneratorService.callGroq(prompt);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error generating JSON rules with custom mappings: " + e.getMessage());
         }
     }
 } 
