@@ -11,6 +11,7 @@ public class TargetDto {
     private List<String> phoneNumberList;
     private BigDecimal salary;
     private LocalDate doj;
+    private BigDecimal bonus;
 
     // Constructors
     public TargetDto() {}
@@ -72,5 +73,13 @@ public class TargetDto {
 
     public void setDoj(LocalDate doj) {
         this.doj = doj;
+    }
+
+    public BigDecimal getBonus() {
+        return bonus;
+    }
+
+    public void setBonus(BigDecimal bonus) {
+        this.bonus = bonus;
     }
 } 

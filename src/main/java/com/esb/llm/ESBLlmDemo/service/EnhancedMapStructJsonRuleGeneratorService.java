@@ -808,7 +808,7 @@ CRITICAL INSTRUCTIONS:
 OUTPUT FORMAT - Return ONLY this complete JSON structure:
 {
   "sourceContentType": "FULL_SOURCE_CLASS_NAME",
-  "targetContentType": "FULL_TARGET_CLASS_NAME",
+  "targetContentType": "com.esb.llm.ESBLlmDemo.model.TargetClassName",
   "conversionRules": [
     {
       "propID": "sourceFieldName_mapping",
@@ -939,7 +939,9 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             
             for (CustomMappingInfo mapping : customMappings) {
                 result.append("CUSTOM MAPPING: ").append(mapping.getMappingName()).append("\n");
+                result.append("Source Field: ").append(mapping.getSourceField()).append("\n");
                 result.append("Target Field: ").append(mapping.getTargetField()).append("\n");
+                result.append("Expression: ").append(mapping.getExpression()).append("\n");
                 result.append("Main Method: ").append(mapping.getMainMethod()).append("\n");
                 result.append("Method Chain:\n");
                 
@@ -1060,6 +1062,7 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             // Check for @Mapping annotations with expressions
             for (AnnotationExpr annotation : md.getAnnotations()) {
                 if (annotation.getNameAsString().equals("Mapping")) {
+                    String source = "";
                     String target = "";
                     String expression = "";
                     
@@ -1067,7 +1070,9 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
                     if (annotation.isNormalAnnotationExpr()) {
                         var normalAnnotation = annotation.asNormalAnnotationExpr();
                         for (var pair : normalAnnotation.getPairs()) {
-                            if (pair.getNameAsString().equals("target")) {
+                            if (pair.getNameAsString().equals("source")) {
+                                source = pair.getValue().asStringLiteralExpr().getValue();
+                            } else if (pair.getNameAsString().equals("target")) {
                                 target = pair.getValue().asStringLiteralExpr().getValue();
                             } else if (pair.getNameAsString().equals("expression")) {
                                 expression = pair.getValue().asStringLiteralExpr().getValue();
@@ -1084,8 +1089,10 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
                         
                         CustomMappingInfo mapping = new CustomMappingInfo();
                         mapping.setMappingName(md.getNameAsString());
+                        mapping.setSourceField(source.isEmpty() ? "EXPRESSION" : source);
                         mapping.setTargetField(target);
                         mapping.setMainMethod(referencedMethod);
+                        mapping.setExpression(expression);
                         
                         // Find method chain
                         List<String> methodChain = findMethodChain(referencedMethod, methodDefinitions);
@@ -1098,10 +1105,41 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
                                 methodDefs.add(method + ": " + methodDefinitions.get(method));
                             }
                         }
+                        
                         mapping.setMethodDefinitions(methodDefs);
                         
                         customMappings.add(mapping);
                     }
+                }
+            }
+            
+            // Check for default methods with custom logic that might be used in mappings
+            if (md.isDefault() && !methodBody.isEmpty() && hasCustomLogic(methodBody)) {
+                // Check if this default method is referenced in any expressions
+                if (methodsReferencedInExpressions.contains(methodName)) {
+                    // This default method is used in a custom mapping
+                    CustomMappingInfo mapping = new CustomMappingInfo();
+                    mapping.setMappingName(methodName);
+                    mapping.setSourceField("DEFAULT_METHOD");
+                    mapping.setTargetField("DEFAULT_METHOD");
+                    mapping.setMainMethod(methodName);
+                    mapping.setExpression("default method: " + methodName);
+                    
+                    // Find method chain
+                    List<String> methodChain = findMethodChain(methodName, methodDefinitions);
+                    mapping.setMethodChain(methodChain);
+                    
+                    // Get method definitions
+                    List<String> methodDefs = new ArrayList<>();
+                    for (String method : methodChain) {
+                        if (methodDefinitions.containsKey(method)) {
+                            methodDefs.add(method + ": " + methodDefinitions.get(method));
+                        }
+                    }
+                    
+                    mapping.setMethodDefinitions(methodDefs);
+                    
+                    customMappings.add(mapping);
                 }
             }
             
@@ -1142,6 +1180,15 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
         
         public List<String> getHelperClasses() {
             return helperClasses.stream().distinct().collect(Collectors.toList());
+        }
+        
+        private boolean hasCustomLogic(String methodBody) {
+            // Check if method body contains custom logic (not just simple assignments)
+            return methodBody.contains("new ") || 
+                   methodBody.contains("(") && methodBody.contains(")") ||
+                   methodBody.contains("if") || 
+                   methodBody.contains("for") ||
+                   methodBody.contains("return") && methodBody.contains("(");
         }
         
         private String extractMethodFromExpression(String expression) {
@@ -1242,8 +1289,10 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
      */
     private static class CustomMappingInfo {
         private String mappingName;
+        private String sourceField;
         private String targetField;
         private String mainMethod;
+        private String expression;
         private List<String> methodChain;
         private List<String> methodDefinitions;
         
@@ -1251,11 +1300,17 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
         public String getMappingName() { return mappingName; }
         public void setMappingName(String mappingName) { this.mappingName = mappingName; }
         
+        public String getSourceField() { return sourceField; }
+        public void setSourceField(String sourceField) { this.sourceField = sourceField; }
+        
         public String getTargetField() { return targetField; }
         public void setTargetField(String targetField) { this.targetField = targetField; }
         
         public String getMainMethod() { return mainMethod; }
         public void setMainMethod(String mainMethod) { this.mainMethod = mainMethod; }
+        
+        public String getExpression() { return expression; }
+        public void setExpression(String expression) { this.expression = expression; }
         
         public List<String> getMethodChain() { return methodChain; }
         public void setMethodChain(List<String> methodChain) { this.methodChain = methodChain; }
@@ -1378,7 +1433,7 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             System.out.println("Successfully parsed source file");
             
             // Extract custom mappings from the parsed code
-            EnhancedCustomMappingExtractor extractor = new EnhancedCustomMappingExtractor();
+            CustomMappingExtractor extractor = new CustomMappingExtractor();
             extractor.visit(cu, null);
             
             List<CustomMappingInfo> customMappings = extractor.getCustomMappings();
@@ -1407,7 +1462,9 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
             
             for (CustomMappingInfo mapping : customMappings) {
                 result.append("CUSTOM MAPPING: ").append(mapping.getMappingName()).append("\n");
+                result.append("Source Field: ").append(mapping.getSourceField()).append("\n");
                 result.append("Target Field: ").append(mapping.getTargetField()).append("\n");
+                result.append("Expression: ").append(mapping.getExpression()).append("\n");
                 result.append("Main Method: ").append(mapping.getMainMethod()).append("\n");
                 result.append("Method Chain:\n");
                 
@@ -1451,205 +1508,136 @@ CRITICAL: Return ONLY the complete JSON. Do not include any explanations, partia
     }
 
     /**
-     * Enhanced JavaParser visitor to extract custom mappings including default methods
+     * Generate a combined JSON structure for direct and custom mappings, with isCustom and logic
      */
-    private static class EnhancedCustomMappingExtractor extends VoidVisitorAdapter<Void> {
-        private List<CustomMappingInfo> customMappings = new ArrayList<>();
-        private Map<String, String> methodDefinitions = new HashMap<>();
-        private List<String> helperClasses = new ArrayList<>();
-        
-        @Override
-        public void visit(MethodDeclaration md, Void arg) {
-            String methodName = md.getNameAsString();
-            String methodBody = md.getBody().map(body -> body.toString()).orElse("");
+    public String generateCombinedJsonRules(String mapperName) {
+        try {
+            // Direct mappings
+            String directMappingsRaw = extractFieldMappings(mapperName);
+            List<Map<String, Object>> conversionRules = new ArrayList<>();
             
-            // Store method definition
-            methodDefinitions.put(methodName, methodBody);
+            for (String line : directMappingsRaw.split("\n")) {
+                if (line.contains("->")) {
+                    String[] parts = line.split("->");
+                    if (parts.length == 2) {
+                        String sourceField = parts[0].trim();
+                        String targetField = parts[1].trim();
+                        
+                        Map<String, Object> rule = new LinkedHashMap<>();
+                        rule.put("propID", sourceField + "Mapping");
+                        rule.put("sourceLocation", sourceField);
+                        rule.put("targetLocation", targetField);
+                        rule.put("isArray", isArrayField(sourceField, targetField));
+                        conversionRules.add(rule);
+                    }
+                }
+            }
+
+            // Custom mappings
+            CustomMappingExtractor extractor = new CustomMappingExtractor();
+            String sourceFilePath = findMapperSourceFile(mapperName);
+            CompilationUnit cu = StaticJavaParser.parse(new File(sourceFilePath));
+            extractor.visit(cu, null);
+            List<CustomMappingInfo> customMappings = extractor.getCustomMappings();
             
-            // Check for @Mapping annotations with expressions
-            for (AnnotationExpr annotation : md.getAnnotations()) {
-                if (annotation.getNameAsString().equals("Mapping")) {
-                    String target = "";
-                    String expression = "";
+            for (CustomMappingInfo mapping : customMappings) {
+                if (!"DEFAULT_METHOD".equals(mapping.getSourceField()) && !"DEFAULT_METHOD".equals(mapping.getTargetField())) {
+                    Map<String, Object> rule = new LinkedHashMap<>();
+                    rule.put("propID", mapping.getTargetField() + "CustomMapping");
+                    rule.put("sourceLocation", mapping.getSourceField());
+                    rule.put("targetLocation", mapping.getTargetField());
+                    rule.put("isArray", false);
+                    rule.put("isCustom", true);
+                    rule.put("expression", mapping.getExpression());
                     
-                    // Handle @Mapping annotation with multiple members
-                    if (annotation.isNormalAnnotationExpr()) {
-                        var normalAnnotation = annotation.asNormalAnnotationExpr();
-                        for (var pair : normalAnnotation.getPairs()) {
-                            if (pair.getNameAsString().equals("target")) {
-                                target = pair.getValue().asStringLiteralExpr().getValue();
-                            } else if (pair.getNameAsString().equals("expression")) {
-                                expression = pair.getValue().asStringLiteralExpr().getValue();
-                            }
-                        }
+                    // Generate custom logic in pseudocode
+                    String customLogic = generateCustomLogic(mapping);
+                    rule.put("customLogic", customLogic);
+                    
+                    // Add method definitions if available
+                    List<String> allMethodDefs = new ArrayList<>();
+                    if (mapping.getMethodDefinitions() != null && !mapping.getMethodDefinitions().isEmpty()) {
+                        allMethodDefs.addAll(mapping.getMethodDefinitions());
                     }
                     
-                    // If this is a custom mapping with expression
-                    if (!target.isEmpty() && !expression.isEmpty() && expression.contains("java(")) {
-                        CustomMappingInfo mapping = new CustomMappingInfo();
-                        mapping.setMappingName(md.getNameAsString());
-                        mapping.setTargetField(target);
-                        mapping.setMainMethod(extractMethodFromExpression(expression));
-                        
-                        // Find method chain
-                        List<String> methodChain = findMethodChain(mapping.getMainMethod(), methodDefinitions);
-                        mapping.setMethodChain(methodChain);
-                        
-                        // Get method definitions
-                        List<String> methodDefs = new ArrayList<>();
-                        for (String method : methodChain) {
-                            if (methodDefinitions.containsKey(method)) {
-                                methodDefs.add(method + ": " + methodDefinitions.get(method));
-                            }
-                        }
-                        mapping.setMethodDefinitions(methodDefs);
-                        
-                        customMappings.add(mapping);
+                    // Add helper class methods if this mapping uses them
+                    if (mapping.getExpression().contains("UserMapperHelp")) {
+                        List<String> helperMethods = extractHelperClassMethods("UserMapperHelp");
+                        allMethodDefs.addAll(helperMethods);
                     }
+                    
+                    if (!allMethodDefs.isEmpty()) {
+                        rule.put("methodDefinitions", allMethodDefs);
+                    }
+                    
+                    conversionRules.add(rule);
                 }
             }
+
+            // Create the final structure
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("sourceContentType", "com.esb.llm.ESBLlmDemo.model.SourceDto");
+            result.put("targetContentType", "com.esb.llm.ESBLlmDemo.model.TargetDto");
+            result.put("conversionRules", conversionRules);
             
-            // Check for default methods with custom logic (not explicitly mapped)
-            if (md.isDefault() && !methodBody.isEmpty() && hasCustomLogic(methodBody)) {
-                // This is a default method with custom logic that might be used in mappings
-                CustomMappingInfo mapping = new CustomMappingInfo();
-                mapping.setMappingName(methodName);
-                mapping.setTargetField("DEFAULT_METHOD");
-                mapping.setMainMethod(methodName);
-                
-                // Find method chain
-                List<String> methodChain = findMethodChain(methodName, methodDefinitions);
-                mapping.setMethodChain(methodChain);
-                
-                // Get method definitions
-                List<String> methodDefs = new ArrayList<>();
-                for (String method : methodChain) {
-                    if (methodDefinitions.containsKey(method)) {
-                        methodDefs.add(method + ": " + methodDefinitions.get(method));
-                    }
-                }
-                mapping.setMethodDefinitions(methodDefs);
-                
-                customMappings.add(mapping);
-            }
-            
-            // Check for helper class usage in method body
-            if (!methodBody.isEmpty()) {
-                List<String> foundHelpers = findHelperClassesInMethod(methodBody);
-                helperClasses.addAll(foundHelpers);
-            }
-            
-            super.visit(md, arg);
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
+        } catch (Exception e) {
+            throw new RuntimeException("Error generating combined JSON rules: " + e.getMessage(), e);
+        }
+    }
+
+    private boolean isArrayField(String sourceField, String targetField) {
+        // Simple heuristic - check if field names suggest arrays/lists
+        String lowerSource = sourceField.toLowerCase();
+        String lowerTarget = targetField.toLowerCase();
+        return lowerSource.contains("list") || lowerSource.contains("array") || 
+               lowerSource.contains("s") || lowerSource.endsWith("s") ||
+               lowerTarget.contains("list") || lowerTarget.contains("array") ||
+               lowerTarget.contains("s") || lowerTarget.endsWith("s");
+    }
+
+    /**
+     * Create a Groq prompt that combines direct and custom mappings in the new JSON structure
+     */
+    public String createGroqPromptCombined(String mapperName) {
+        String combinedJson = generateCombinedJsonRules(mapperName);
+        return "You are an expert mapping rule generator. Given the following combined mapping rules (direct and custom), generate mapping code or logic for each field. If isCustom is true, use the provided logic/pseudocode.\n\n" + combinedJson;
+    }
+
+    private String generateCustomLogic(CustomMappingInfo mapping) {
+        StringBuilder logic = new StringBuilder();
+        String targetField = mapping.getTargetField();
+        String expression = mapping.getExpression();
+        
+        logic.append("// Custom mapping for ").append(targetField).append("\n");
+        
+        if (expression.contains("calculateSalaryWithAdjustment")) {
+            logic.append("1. Get base salary from source\n");
+            logic.append("2. Calculate experience bonus (5% per year, capped at 50%)\n");
+            logic.append("3. Calculate performance multiplier based on age and experience:\n");
+            logic.append("   - Young employees (25-35) with 2-5 years: 1.15x\n");
+            logic.append("   - Experienced employees (35-50) with 5+ years: 1.08x\n");
+            logic.append("   - Senior employees (50+): 1.02x\n");
+            logic.append("4. Apply market adjustment factor\n");
+            logic.append("5. Calculate final salary = base * (1 + exp_bonus) * perf_mult * market_adj\n");
+        } else if (expression.contains("calculateAdjustedAge")) {
+            logic.append("1. Get current age from source\n");
+            logic.append("2. Get date of joining from source\n");
+            logic.append("3. Calculate years of service = current_date - doj\n");
+            logic.append("4. Apply age adjustment based on experience\n");
+            logic.append("5. Return adjusted age\n");
+        } else if (expression.contains("calculateBonusWithHistory")) {
+            logic.append("1. Get base salary from source\n");
+            logic.append("2. Calculate performance multiplier based on age and experience\n");
+            logic.append("3. Calculate experience bonus (5% per year, capped at 50%)\n");
+            logic.append("4. Calculate ID factor (10% more if user ID ends with odd digit)\n");
+            logic.append("5. Calculate bonus = base_salary * (perf_mult + exp_bonus) * id_factor\n");
+        } else {
+            logic.append("1. Execute custom expression: ").append(expression).append("\n");
+            logic.append("2. Apply any business rules specific to ").append(targetField).append("\n");
+            logic.append("3. Return calculated value\n");
         }
         
-        public List<CustomMappingInfo> getCustomMappings() {
-            return customMappings;
-        }
-        
-        public List<String> getHelperClasses() {
-            return helperClasses.stream().distinct().collect(Collectors.toList());
-        }
-        
-        private boolean hasCustomLogic(String methodBody) {
-            // Check if method body contains custom logic (not just simple assignments)
-            return methodBody.contains("new ") || 
-                   methodBody.contains("(") && methodBody.contains(")") ||
-                   methodBody.contains("if") || 
-                   methodBody.contains("for") ||
-                   methodBody.contains("return") && methodBody.contains("(");
-        }
-        
-        // ... existing helper methods from CustomMappingExtractor ...
-        private String extractMethodFromExpression(String expression) {
-            // Extract method name from java() expression
-            if (expression.contains("java(")) {
-                String javaCode = expression.substring(expression.indexOf("java(") + 5, expression.lastIndexOf(")"));
-                // Find method call pattern
-                String[] parts = javaCode.split("\\.");
-                if (parts.length > 0) {
-                    String lastPart = parts[parts.length - 1];
-                    if (lastPart.contains("(")) {
-                        return lastPart.substring(0, lastPart.indexOf("("));
-                    }
-                }
-            }
-            return "";
-        }
-        
-        private List<String> findMethodChain(String startMethod, Map<String, String> methodDefs) {
-            List<String> chain = new ArrayList<>();
-            Set<String> visited = new HashSet<>();
-            
-            findMethodChainRecursive(startMethod, methodDefs, chain, visited);
-            return chain;
-        }
-        
-        private void findMethodChainRecursive(String methodName, Map<String, String> methodDefs, 
-                                            List<String> chain, Set<String> visited) {
-            if (visited.contains(methodName) || !methodDefs.containsKey(methodName)) {
-                return;
-            }
-            
-            visited.add(methodName);
-            chain.add(methodName);
-            
-            String methodBody = methodDefs.get(methodName);
-            
-            // Find method calls in the body
-            String[] lines = methodBody.split("\n");
-            for (String line : lines) {
-                // Look for method calls (simplified pattern matching)
-                if (line.contains("(") && line.contains(")") && !line.contains("if") && !line.contains("for")) {
-                    String[] words = line.split("\\s+");
-                    for (String word : words) {
-                        if (word.contains("(") && word.contains(")") && !word.startsWith("(")) {
-                            String potentialMethod = word.substring(0, word.indexOf("("));
-                            if (methodDefs.containsKey(potentialMethod) && !visited.contains(potentialMethod)) {
-                                findMethodChainRecursive(potentialMethod, methodDefs, chain, visited);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        private List<String> findHelperClassesInMethod(String methodBody) {
-            List<String> helpers = new ArrayList<>();
-            
-            // Look for patterns like "new UserMapperHelp()" or "helper.calculateAdjustedSalary"
-            String[] lines = methodBody.split("\n");
-            for (String line : lines) {
-                // Pattern for "new ClassName()"
-                if (line.contains("new ") && line.contains("()")) {
-                    String[] parts = line.split("new ");
-                    for (String part : parts) {
-                        if (part.contains("()")) {
-                            String className = part.substring(0, part.indexOf("("));
-                            if (className.contains(".")) {
-                                className = className.substring(className.lastIndexOf(".") + 1);
-                            }
-                            if (className.endsWith("Help") || className.endsWith("Helper") || 
-                                className.endsWith("Mapper") || className.endsWith("Util")) {
-                                helpers.add(className);
-                            }
-                        }
-                    }
-                }
-                
-                // Pattern for "helper.methodName" or "className.methodName"
-                if (line.contains(".") && line.contains("(")) {
-                    String[] parts = line.split("\\.");
-                    if (parts.length > 1) {
-                        String potentialHelper = parts[0].trim();
-                        if (potentialHelper.endsWith("Help") || potentialHelper.endsWith("Helper") || 
-                            potentialHelper.endsWith("Mapper") || potentialHelper.endsWith("Util")) {
-                            helpers.add(potentialHelper);
-                        }
-                    }
-                }
-            }
-            
-            return helpers;
-        }
+        return logic.toString();
     }
 } 

@@ -101,4 +101,30 @@ public class UserMapperHelp {
         }
         return calculateAdjustedSalary(salary, sourceDto.getAge(), sourceDto.getDoj());
     }
+
+    /**
+     * Calculates bonus based on salary, age, doj, and userId history
+     */
+    public BigDecimal calculateBonusHistory(BigDecimal baseSalary, int age, LocalDate doj, String userId) {
+        // Use performance multiplier and experience bonus
+        BigDecimal perf = calculatePerformanceMultiplier(age, doj);
+        BigDecimal exp = calculateExperienceBonus(doj);
+        BigDecimal idFactor = calculateIdFactor(userId);
+        // Bonus = baseSalary * (perf + exp) * idFactor
+        return baseSalary.multiply(perf.add(exp)).multiply(idFactor).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Private helper for userId-based bonus adjustment
+     */
+    private BigDecimal calculateIdFactor(String userId) {
+        // Simple logic: if userId ends with odd digit, bonus is higher
+        if (userId != null && !userId.isEmpty()) {
+            char last = userId.charAt(userId.length() - 1);
+            if (Character.isDigit(last) && ((last - '0') % 2 == 1)) {
+                return BigDecimal.valueOf(1.1); // 10% more
+            }
+        }
+        return BigDecimal.ONE;
+    }
 } 

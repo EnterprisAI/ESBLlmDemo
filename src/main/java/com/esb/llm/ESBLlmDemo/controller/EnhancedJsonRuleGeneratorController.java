@@ -194,4 +194,32 @@ public class EnhancedJsonRuleGeneratorController {
                 .body("Error generating JSON rules with custom mappings: " + e.getMessage());
         }
     }
+
+    /**
+     * Get combined JSON rules for direct and custom mappings
+     */
+    @GetMapping("/combined-json-rules/{mapperName}")
+    public ResponseEntity<String> getCombinedJsonRules(@PathVariable String mapperName) {
+        try {
+            String json = enhancedJsonRuleGeneratorService.generateCombinedJsonRules(mapperName);
+            return ResponseEntity.ok(json);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error generating combined JSON rules: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get Groq prompt with combined mappings
+     */
+    @GetMapping("/groq-prompt-combined/{mapperName}")
+    public ResponseEntity<String> getGroqPromptCombined(@PathVariable String mapperName) {
+        try {
+            String prompt = enhancedJsonRuleGeneratorService.createGroqPromptCombined(mapperName);
+            return ResponseEntity.ok(prompt);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error generating Groq prompt: " + e.getMessage());
+        }
+    }
 } 
